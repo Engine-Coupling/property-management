@@ -16,6 +16,7 @@ export async function updateProperty(id: string, formData: FormData) {
     const name = formData.get("name") as string
     const address = formData.get("address") as string
     const monthlyPayment = parseFloat(formData.get("monthlyPayment") as string) || 0
+    const deposit = parseFloat(formData.get("deposit") as string) || 0
 
     // Wifi
     const wifiSsid = formData.get("wifiSsid") as string
@@ -46,6 +47,7 @@ export async function updateProperty(id: string, formData: FormData) {
                 name,
                 address,
                 monthlyPayment,
+                deposit,
                 wifiSsid,
                 wifiSsid5G,
                 wifiPass,

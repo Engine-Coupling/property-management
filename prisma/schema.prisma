@@ -68,6 +68,7 @@ model Property {
   name        String
   address     String
   monthlyPayment Float    @default(0)
+  deposit        Float    @default(0)
   
   wifiSsid    String?
   wifiSsid5G  String?

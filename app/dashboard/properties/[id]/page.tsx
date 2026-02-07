@@ -137,6 +137,9 @@ export default async function PropertyDetailsPage(props: { params: Promise<{ id:
                             {/* Financial Quick View */}
                             <span className="text-xs font-bold text-zinc-500 uppercase block mb-1">Canon Actual</span>
                             <span className="font-medium text-emerald-600">${property.monthlyPayment?.toLocaleString()}</span>
+
+                            <span className="text-xs font-bold text-zinc-500 uppercase block mt-2 mb-1">Depósito</span>
+                            <span className="font-medium text-blue-600">${property.deposit?.toLocaleString() || "0"}</span>
                         </div>
                     </div>
 
