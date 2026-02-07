@@ -56,6 +56,24 @@ async function main() {
             }
         }
     }
+
+    // 4. Promote Admins (Managers)
+    const admins = ['413cecilst@gmail.com', 'carlosmario646@gmail.com']
+
+    for (const email of admins) {
+        console.log(`Promoting user ${email} to ADMIN...`)
+        const user = await prisma.user.findUnique({ where: { email } })
+
+        if (user) {
+            await prisma.user.update({
+                where: { email },
+                data: { role: 'ADMIN' }
+            })
+            console.log(`User ${email} is now ADMIN (Manager Role)`)
+        } else {
+            console.log(`User ${email} not found. Please log in with this email first.`)
+        }
+    }
 }
 
 main()

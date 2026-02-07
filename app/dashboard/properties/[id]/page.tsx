@@ -65,7 +65,7 @@ export default async function PropertyDetailsPage(props: { params: Promise<{ id:
                             Editar Propiedad
                         </Link>
                     )}
-                    {(isAdmin || isPowerAdmin) && (
+                    {isPowerAdmin && (
                         <>
                             <Link
                                 href={`/dashboard/properties/${property.id}/expenses`}
