@@ -29,7 +29,7 @@ export default async function PropertiesPage() {
                     <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Propiedades</h1>
                     <p className="text-zinc-500 dark:text-zinc-400">Gestionar y rastrear todas las propiedades.</p>
                 </div>
-                </div>
+
                 {session.user.role === "POWER_ADMIN" && (
                     <Link
                         href="/dashboard/properties/new"
