@@ -9,18 +9,7 @@ export default async function PropertiesPage() {
     const session = await getServerSession(authOptions)
 
     if (!session || (session.user.role !== "ADMIN" && session.user.role !== "POWER_ADMIN")) {
-        // Debugging: Show what the server sees instead of redirecting
-        return (
-            <div className="p-10 space-y-4">
-                <h1 className="text-2xl font-bold text-red-500">Access Denied Debugging</h1>
-                <p>Server Role: <strong>{session?.user?.role || "Undefined"}</strong></p>
-                <p>User Email: {session?.user?.email}</p>
-                <p>UserID: {session?.user?.id}</p>
-                <pre className="bg-gray-100 p-4 rounded text-xs">
-                    {JSON.stringify(session, null, 2)}
-                </pre>
-            </div>
-        )
+        redirect("/dashboard/owner")
     }
 
     const properties = await prisma.property.findMany({
