@@ -11,7 +11,7 @@ export async function GET() {
 
     try {
         let properties
-        if (role === "ADMIN") {
+        if (role === "ADMIN" || role === "POWER_ADMIN") {
             properties = await prisma.property.findMany({
                 include: {
                     owner: { select: { name: true, email: true } }
@@ -35,8 +35,8 @@ export async function GET() {
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
 
-    if (!session || !session.user || ((session.user as any).role !== "ADMIN" && (session.user as any).role !== "POWER_ADMIN")) {
-        // Only admins can create properties
+    if (!session || !session.user || (session.user as any).role !== "POWER_ADMIN") {
+        // Only power admins can create properties
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

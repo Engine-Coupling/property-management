@@ -8,7 +8,7 @@ import Link from "next/link"
 export default async function PropertiesPage() {
     const session = await getServerSession(authOptions)
 
-    if (!session || session.user.role !== "ADMIN") {
+    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "POWER_ADMIN")) {
         redirect("/dashboard/owner")
     }
 
@@ -29,13 +29,16 @@ export default async function PropertiesPage() {
                     <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Propiedades</h1>
                     <p className="text-zinc-500 dark:text-zinc-400">Gestionar y rastrear todas las propiedades.</p>
                 </div>
-                <Link
-                    href="/dashboard/properties/new"
-                    className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
-                >
-                    <Plus className="w-4 h-4" />
-                    Agregar Propiedad
-                </Link>
+                </div>
+                {session.user.role === "POWER_ADMIN" && (
+                    <Link
+                        href="/dashboard/properties/new"
+                        className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Agregar Propiedad
+                    </Link>
+                )}
             </div>
 
             <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
@@ -97,6 +100,6 @@ export default async function PropertiesPage() {
                     </table>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

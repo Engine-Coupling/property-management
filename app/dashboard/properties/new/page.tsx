@@ -2,12 +2,18 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { Building2, MapPin, Mail, Loader2 } from "lucide-react"
 
 export default function NewPropertyPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
+    const { data: session } = useSession()
+
+    if (session?.user && (session.user as any).role !== "POWER_ADMIN") {
+        router.push("/dashboard/properties")
+    }
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
