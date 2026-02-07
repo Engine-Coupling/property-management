@@ -8,7 +8,7 @@ async function main() {
     console.log(`Promoting user ${email} to ADMIN...`)
     const user = await prisma.user.update({
         where: { email },
-        data: { role: 'ADMIN' }
+        data: { role: 'POWER_ADMIN' }
     })
     console.log(`User ${user.name} is now ${user.role}`)
 

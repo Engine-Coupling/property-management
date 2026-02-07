@@ -35,7 +35,7 @@ export async function GET() {
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || ((session.user as any).role !== "ADMIN" && (session.user as any).role !== "POWER_ADMIN")) {
         // Only admins can create properties
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }

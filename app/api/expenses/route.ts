@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     }
 
     // Admins can see all. Owners can only see their own.
-    if ((session.user as any).role !== "ADMIN" && property.ownerId !== (session.user as any).id) {
+    if ((session.user as any).role !== "ADMIN" && (session.user as any).role !== "POWER_ADMIN" && property.ownerId !== (session.user as any).id) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || ((session.user as any).role !== "ADMIN" && (session.user as any).role !== "POWER_ADMIN")) {
         return NextResponse.json({ error: "Forbidden. Only Admins can add expenses." }, { status: 403 })
     }
 
