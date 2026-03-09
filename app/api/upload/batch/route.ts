@@ -11,7 +11,9 @@ export async function POST(req: Request) {
     }
 
     // Cast to any to access accessToken
-    const accessToken = (session as any).accessToken
+    // We will use the Service Account for uploads instead of the User token
+    // to avoid Drive permission/scope issues when creating folders in a central root folder.
+    // const accessToken = (session as any).accessToken
 
     try {
         const formData = await req.formData()
@@ -27,10 +29,10 @@ export async function POST(req: Request) {
         const uploads: Record<string, { file: File, meta: any }> = {}
 
         for (const [key, value] of entries) {
-            if (key.startsWith("file_") && value instanceof File) {
+            if (key.startsWith("file_") && typeof value === "object" && value !== null && "name" in value) {
                 const propId = key.replace("file_", "")
                 if (!uploads[propId]) uploads[propId] = {} as any
-                uploads[propId].file = value
+                uploads[propId].file = value as File
             }
             if (key.startsWith("meta_") && typeof value === 'string') {
                 const propId = key.replace("meta_", "")
@@ -59,14 +61,10 @@ export async function POST(req: Request) {
         const parentFolderName = `Dosquebradas Report ${month} - ${timestamp.slice(-6)}`
 
         // 2. Create Parent Folder
+        // Using Service Account to ensure it has permissions to the root folder
         let parentFolderId: string | undefined
-        if (accessToken) {
-            const folder = await createDriveFolderWithToken(parentFolderName, accessToken)
-            parentFolderId = folder?.id || undefined
-        } else {
-            const folder = await createDriveFolder(parentFolderName)
-            parentFolderId = folder?.id || undefined
-        }
+        const folder = await createDriveFolder(parentFolderName)
+        parentFolderId = folder?.id || undefined
 
         if (!parentFolderId) throw new Error("Failed to create parent folder")
 
@@ -79,13 +77,8 @@ export async function POST(req: Request) {
 
         // Helper to create subfolder
         const createSubfolder = async (name: string) => {
-            if (accessToken) {
-                const f = await createDriveFolderWithToken(name, accessToken, parentFolderId)
-                return f?.id
-            } else {
-                const f = await createDriveFolder(name, parentFolderId)
-                return f?.id
-            }
+            const f = await createDriveFolder(name, parentFolderId)
+            return f?.id
         }
 
         // We can lazy create these if we see files
@@ -110,12 +103,7 @@ export async function POST(req: Request) {
             const targetFolderId = subfolderIds[subKey] || parentFolderId
 
             // Upload
-            let uploadedFile;
-            if (accessToken) {
-                uploadedFile = await uploadFileWithUserToken(file, targetFolderId, accessToken)
-            } else {
-                uploadedFile = await uploadFileToDrive(file, targetFolderId)
-            }
+            const uploadedFile = await uploadFileToDrive(file, targetFolderId)
 
             if (uploadedFile && uploadedFile.webViewLink) {
                 links[propId] = uploadedFile.webViewLink
