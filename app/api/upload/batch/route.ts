@@ -14,10 +14,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Cast to any to access accessToken
-    // We will use the Service Account for uploads instead of the User token
-    // to avoid Drive permission/scope issues when creating folders in a central root folder.
-    // const accessToken = (session as any).accessToken
+    // Use the user's OAuth access token for Drive uploads.
+    // Service accounts have no storage quota on regular Drive folders,
+    // so we must use the authenticated user's token instead.
+    const accessToken = (session as any).accessToken
+    if (!accessToken) {
+        return NextResponse.json(
+            { error: "No Drive access token. Please sign out and sign back in to grant Drive permissions." },
+            { status: 401 }
+        )
+    }
 
     try {
         const formData = await req.formData()
@@ -46,7 +52,6 @@ export async function POST(req: Request) {
         }
 
         // 1. Identify Batch Details
-        // We look for BATCH_REPORT meta to get period/month details for the main folder name
         let batchMeta: any = null
         for (const [key, value] of entries) {
             if (key.startsWith("meta_bank") && typeof value === 'string') {
@@ -55,50 +60,35 @@ export async function POST(req: Request) {
             }
         }
 
-        // Fallback if no bank meta (unlikely if loop runs, but safety check)
-        // If batchMeta is missing, just use current date
         const now = new Date()
         const month = batchMeta?.month || now.toISOString().slice(0, 7)
         const timestamp = Date.now().toString()
-        // Folder Name: "Dosquebradas Report [YYYY-MM] - [ID]"
-        // This is cleaner than including the long ID, but unique enough
         const parentFolderName = `Dosquebradas Report ${month} - ${timestamp.slice(-6)}`
 
-        // 2. Create Parent Folder
-        // Using Service Account to ensure it has permissions to the root folder
-        let parentFolderId: string | undefined
-        const folder = await createDriveFolder(parentFolderName)
-        parentFolderId = folder?.id || undefined
+        // 2. Create Parent Folder using user's token
+        const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID
+        const folder = await createDriveFolderWithToken(parentFolderName, accessToken, rootFolderId)
+        const parentFolderId = folder?.id
 
         if (!parentFolderId) throw new Error("Failed to create parent folder")
 
         // 3. Process Uploads
-        // We will organize by type: "Gas", "Extra", "Bank"
-        // Since we are iterating all keys, let's just upload directly to Parent Folder for now, 
-        // OR create subfolders if we want to be very organized. 
-        // User asked for "Improve structure", so subfolders "Receipts" or type-based is good.
-        // Let's create specific subfolders: "Gas", "Extra", "Bank"
-
-        // Helper to create subfolder
         const createSubfolder = async (name: string) => {
-            const f = await createDriveFolder(name, parentFolderId)
+            const f = await createDriveFolderWithToken(name, accessToken, parentFolderId)
             return f?.id
         }
 
-        // We can lazy create these if we see files
         const subfolderIds: Record<string, string> = {}
 
         for (const propId in uploads) {
             const { file, meta } = uploads[propId]
             if (!file || !meta) continue
 
-            // Determine Target Subfolder Key
             let subKey = "Misc"
             if (meta.propertyName === "BATCH_GAS") subKey = "Gas"
             else if (meta.propertyName === "BATCH_EXTRA") subKey = "Extra"
-            else if (meta.propertyName === "BATCH_REPORT") subKey = "Bank" // Bank file
+            else if (meta.propertyName === "BATCH_REPORT") subKey = "Bank"
 
-            // Create Subfolder if not exists
             if (!subfolderIds[subKey]) {
                 const id = await createSubfolder(subKey)
                 if (id) subfolderIds[subKey] = id
@@ -106,8 +96,8 @@ export async function POST(req: Request) {
 
             const targetFolderId = subfolderIds[subKey] || parentFolderId
 
-            // Upload
-            const uploadedFile = await uploadFileToDrive(file, targetFolderId)
+            // Upload using user's token
+            const uploadedFile = await uploadFileWithUserToken(file, targetFolderId, accessToken)
 
             if (uploadedFile && uploadedFile.webViewLink) {
                 links[propId] = uploadedFile.webViewLink
@@ -121,3 +111,4 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: message }, { status: 500 })
     }
 }
+
