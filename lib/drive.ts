@@ -43,6 +43,7 @@ export async function uploadFileToDrive(file: File, folderId?: string) {
             requestBody: fileMetadata,
             media: media,
             fields: "id, webViewLink, webContentLink",
+            supportsAllDrives: true,
         })
 
         return response.data
@@ -76,6 +77,7 @@ export async function createDriveFolder(folderName: string, parentId?: string) {
         const response = await drive.files.create({
             requestBody: fileMetadata,
             fields: "id, webViewLink",
+            supportsAllDrives: true,
         })
 
         return response.data
