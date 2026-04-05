@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { uploadFileToDrive, createDriveFolder, uploadFileWithUserToken, createDriveFolderWithToken } from "@/lib/drive"
 
+// Increase Vercel serverless function timeout (default is 10s, which is too short
+// for sequential Drive folder creation + file uploads)
+export const maxDuration = 60
+
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
     const role = (session?.user as any)?.role
@@ -113,6 +117,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ links })
     } catch (error) {
         console.error("Batch upload error:", error)
-        return NextResponse.json({ error: "Upload failed" }, { status: 500 })
+        const message = error instanceof Error ? error.message : "Upload failed"
+        return NextResponse.json({ error: message }, { status: 500 })
     }
 }

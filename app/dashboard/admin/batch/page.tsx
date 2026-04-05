@@ -196,7 +196,10 @@ export default function BatchReportPage() {
                     body: formData
                 })
 
-                if (!uploadRes.ok) throw new Error("Batch upload failed")
+                if (!uploadRes.ok) {
+                    const errData = await uploadRes.json().catch(() => ({}))
+                    throw new Error(errData.error || `Upload failed (${uploadRes.status})`)
+                }
                 const uploadData = await uploadRes.json()
 
                 if (uploadData.links) {
@@ -236,7 +239,7 @@ export default function BatchReportPage() {
             setResults(res.results)
         } catch (error) {
             console.error(error)
-            alert("Failed to process batch. Please try again.")
+            alert(`Error: ${error instanceof Error ? error.message : "Failed to process batch. Please try again."}`)
         } finally {
             setLoading(false)
             setUploading(false)
