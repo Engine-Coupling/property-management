@@ -80,6 +80,7 @@ model Property {
   cedula      String?
   tenantName  String?
   tenantEmail String?
+  tenantPhone String?
   
   startDate   DateTime?
   endDate     DateTime?

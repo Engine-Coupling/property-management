@@ -32,6 +32,7 @@ export async function updateProperty(id: string, formData: FormData) {
     const cedula = formData.get("cedula") as string
     const tenantName = formData.get("tenantName") as string
     const tenantEmail = formData.get("tenantEmail") as string
+    const tenantPhone = formData.get("tenantPhone") as string
 
     // Dates
     const startDateRaw = formData.get("startDate") as string
@@ -57,6 +58,7 @@ export async function updateProperty(id: string, formData: FormData) {
                 cedula,
                 tenantName,
                 tenantEmail,
+                tenantPhone,
                 startDate,
                 endDate,
             }

@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { redirect } from "next/navigation"
-import { Building2, Plus, Users, Search } from "lucide-react"
+import { Building2, Plus, Search, Phone, KeyRound, User } from "lucide-react"
 import Link from "next/link"
 
 export default async function PropertiesPage() {
@@ -13,12 +13,6 @@ export default async function PropertiesPage() {
     }
 
     const properties = await prisma.property.findMany({
-        include: {
-            owner: true,
-            _count: {
-                select: { expenses: true },
-            },
-        },
         orderBy: { createdAt: 'desc' },
     })
 
@@ -48,15 +42,16 @@ export default async function PropertiesPage() {
                             <tr>
                                 <th className="px-6 py-4">Propiedad</th>
                                 <th className="px-6 py-4">Dirección</th>
-                                <th className="px-6 py-4">Propietario</th>
-                                <th className="px-6 py-4">Estadísticas</th>
+                                <th className="px-6 py-4">Inquilino</th>
+                                <th className="px-6 py-4">Pin Puerta</th>
+                                <th className="px-6 py-4">Teléfono Inquilino</th>
                                 <th className="px-6 py-4 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                             {properties.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
+                                    <td colSpan={6} className="px-6 py-12 text-center text-zinc-500">
                                         No se encontraron propiedades.
                                     </td>
                                 </tr>
@@ -76,14 +71,23 @@ export default async function PropertiesPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
-                                                <Users className="w-4 h-4 text-zinc-400" />
-                                                <span className="truncate max-w-[150px]" title={property.owner?.email || "Unassigned"}>
-                                                    {property.owner?.name || property.owner?.email || "Sin asignar"}
+                                                <User className="w-4 h-4 text-zinc-400" />
+                                                <span className="truncate max-w-[150px]" title={property.tenantName || "Sin inquilino"}>
+                                                    {property.tenantName || "Sin inquilino"}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-zinc-500 dark:text-zinc-400">
-                                            {property._count.expenses} gastos
+                                            <div className="flex items-center gap-2">
+                                                <KeyRound className="w-4 h-4 text-zinc-400" />
+                                                <span className="font-mono">{property.doorPin || "—"}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-zinc-500 dark:text-zinc-400">
+                                            <div className="flex items-center gap-2">
+                                                <Phone className="w-4 h-4 text-zinc-400" />
+                                                {property.tenantPhone || "—"}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <Link
