@@ -17,11 +17,6 @@ async function main() {
             name: 'Julian Cardona',
             role: 'POWER_ADMIN',
         },
-        {
-            email: 'carlosmario646@hotmail.com',
-            name: 'Carlos Mario',
-            role: 'ADMIN',
-        },
     ];
 
     for (const user of users) {
@@ -41,9 +36,9 @@ async function main() {
         console.log(`👤 Upserted user: ${upsertedUser.email} (${upsertedUser.role})`);
     }
 
-    // 2. Fetch the Owner (Carlos Mario) to assign properties
+    // 2. Fetch the Owner (Paula) to assign properties
     const owner = await prisma.user.findUnique({
-        where: { email: 'carlosmario646@hotmail.com' }
+        where: { email: 'pjramg@gmail.com' }
     });
 
     if (owner) {
@@ -69,7 +64,7 @@ async function main() {
             console.log(`🏠 Created property: ${upsertedProp.name}`);
         }
     } else {
-        console.warn('⚠️ Admin user not found, skipping property creation.');
+        console.warn('⚠️ Owner user not found, skipping property creation.');
     }
 
     console.log('✅ Seeding finished.');

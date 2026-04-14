@@ -14,11 +14,6 @@ async function main() {
             name: 'Julian Cardona',
             role: 'POWER_ADMIN',
         },
-        {
-            email: 'carlosmario646@hotmail.com',
-            name: 'Carlos Mario',
-            role: 'ADMIN',
-        },
     ];
 
     console.log('Start seeding users...');
