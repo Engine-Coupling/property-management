@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Building2, Users } from "lucide-react"
+import { DbDownloadButton } from "@/components/db-download-button"
 
 export default async function AdminDashboard() {
     const session = await getServerSession(authOptions)
@@ -28,7 +29,7 @@ export default async function AdminDashboard() {
                     <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">Tablero</h1>
                     <p className="text-zinc-500 dark:text-zinc-400">Resumen y estado de todas las propiedades.</p>
                 </div>
-                {/* No Actions for Read-Only Dashboard */}
+                <DbDownloadButton />
             </div>
 
             <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
