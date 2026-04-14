@@ -3,7 +3,7 @@
 import { useSession, signOut } from "next-auth/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Building2, Receipt, Users, LogOut, Settings } from "lucide-react"
+import { LayoutDashboard, Building2, Receipt, Users, LogOut, Settings, Scale } from "lucide-react"
 
 export function Sidebar() {
     const { data: session } = useSession()
@@ -42,6 +42,12 @@ export function Sidebar() {
             href: "/dashboard/owners",
             icon: Users,
             show: isAdmin,
+        },
+        {
+            name: "Cruce de Cuentas",
+            href: "/dashboard/reconciliation",
+            icon: Scale,
+            show: isPowerAdmin,
         },
     ]
 
