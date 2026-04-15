@@ -1,13 +1,17 @@
 "use client"
 
 import { useMemo } from "react"
-import { format } from "date-fns"
+import { format, getDaysInMonth } from "date-fns"
 import { es } from "date-fns/locale"
 import { formatCurrency } from "@/lib/utils"
 import { Scale, Building2, ArrowDownRight, ArrowUpRight, Minus } from "lucide-react"
 
-// The administrator's fixed rent for "Santa Lucia del Bosque"
-const ADMIN_RENT = 4_000_000
+// The administrator's fixed monthly rent for "Santa Lucia del Bosque"
+const ADMIN_MONTHLY_RENT = 4_000_000
+
+// Reconciliation starts from this month (inclusive)
+const START_YEAR = 2026
+const START_MONTH = 4 // 0-indexed: 4 = May
 
 interface Report {
     id: string
@@ -22,17 +26,21 @@ interface Report {
     payout: number
 }
 
-interface PeriodGroup {
-    key: string
+interface MonthBucket {
+    year: number
+    month: number // 0-indexed
     label: string
-    startDate: Date
-    endDate: Date
-    properties: {
-        name: string
-        hoa: number
-    }[]
-    totalHoa: number
     adminDebt: number
+    hoaCredits: {
+        reportId: string
+        propertyName: string
+        totalHoa: number
+        daysInMonth: number
+        totalReportDays: number
+        proratedHoa: number
+        reportLabel: string
+    }[]
+    totalHoaCredit: number
     netBalance: number
 }
 
@@ -40,69 +48,121 @@ interface ReconciliationTableProps {
     reports: Report[]
 }
 
+/**
+ * Calculate how many days of a report period fall within a given calendar month.
+ */
+function daysOverlap(
+    reportStart: Date,
+    reportEnd: Date,
+    monthStart: Date,
+    monthEnd: Date
+): number {
+    const overlapStart = reportStart > monthStart ? reportStart : monthStart
+    const overlapEnd = reportEnd < monthEnd ? reportEnd : monthEnd
+
+    if (overlapStart > overlapEnd) return 0
+
+    // +1 because both start and end are inclusive
+    const diffMs = overlapEnd.getTime() - overlapStart.getTime()
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1
+}
+
 export function ReconciliationTable({ reports }: ReconciliationTableProps) {
-    // Group reports by period (startDate + endDate combo)
-    const periods: PeriodGroup[] = useMemo(() => {
-        const groupMap = new Map<string, Report[]>()
+    const months: MonthBucket[] = useMemo(() => {
+        // Determine date range: from START to either today or latest report, whichever is later
+        const now = new Date()
+        const currentYear = now.getFullYear()
+        const currentMonth = now.getMonth()
+
+        // Find latest report date to extend range if needed
+        let endYear = currentYear
+        let endMonth = currentMonth
 
         for (const r of reports) {
-            // Use start+end as the period key
-            const key = `${r.startDate.slice(0, 10)}_${r.endDate.slice(0, 10)}`
-            if (!groupMap.has(key)) groupMap.set(key, [])
-            groupMap.get(key)!.push(r)
+            const d = new Date(r.endDate)
+            if (d.getFullYear() > endYear || (d.getFullYear() === endYear && d.getMonth() > endMonth)) {
+                endYear = d.getFullYear()
+                endMonth = d.getMonth()
+            }
         }
 
-        const result: PeriodGroup[] = []
+        // Build calendar month buckets from START to end
+        const buckets: MonthBucket[] = []
+        let y = START_YEAR
+        let m = START_MONTH
 
-        for (const [key, periodReports] of groupMap.entries()) {
-            const startDate = new Date(periodReports[0].startDate)
-            const endDate = new Date(periodReports[0].endDate)
-            const label = format(startDate, "MMMM yyyy", { locale: es })
+        while (y < endYear || (y === endYear && m <= endMonth)) {
+            const daysInMo = getDaysInMonth(new Date(y, m))
+            const monthStart = new Date(y, m, 1, 0, 0, 0)
+            const monthEnd = new Date(y, m, daysInMo, 23, 59, 59)
 
-            const properties = periodReports.map((r) => ({
-                name: r.propertyName,
-                hoa: r.totalHoa,
-            }))
+            const hoaCredits: MonthBucket["hoaCredits"] = []
 
-            const totalHoa = properties.reduce((sum, p) => sum + p.hoa, 0)
-            const adminDebt = ADMIN_RENT
-            const netBalance = adminDebt - totalHoa
+            for (const r of reports) {
+                const rStart = new Date(r.startDate)
+                const rEnd = new Date(r.endDate)
 
-            result.push({
-                key,
-                label,
-                startDate,
-                endDate,
-                properties,
-                totalHoa,
-                adminDebt,
-                netBalance,
+                const overlap = daysOverlap(rStart, rEnd, monthStart, monthEnd)
+                if (overlap <= 0) continue
+
+                // Total days in the report period (inclusive)
+                const totalReportDays =
+                    Math.floor((rEnd.getTime() - rStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+                // Prorate the HOA proportionally
+                const proratedHoa = Math.round((r.totalHoa * overlap) / totalReportDays)
+
+                const reportLabel = `${format(rStart, "dd MMM", { locale: es })} – ${format(rEnd, "dd MMM", { locale: es })}`
+
+                hoaCredits.push({
+                    reportId: r.id,
+                    propertyName: r.propertyName,
+                    totalHoa: r.totalHoa,
+                    daysInMonth: overlap,
+                    totalReportDays,
+                    proratedHoa,
+                    reportLabel,
+                })
+            }
+
+            const totalHoaCredit = hoaCredits.reduce((sum, c) => sum + c.proratedHoa, 0)
+
+            buckets.push({
+                year: y,
+                month: m,
+                label: format(new Date(y, m), "MMMM yyyy", { locale: es }),
+                adminDebt: ADMIN_MONTHLY_RENT,
+                hoaCredits,
+                totalHoaCredit,
+                netBalance: ADMIN_MONTHLY_RENT - totalHoaCredit,
             })
+
+            // Advance
+            m++
+            if (m > 11) {
+                m = 0
+                y++
+            }
         }
 
-        // Sort by date descending
-        result.sort((a, b) => b.startDate.getTime() - a.startDate.getTime())
-        return result
+        return buckets
     }, [reports])
 
-    // Running balance (oldest first, then reverse for display)
-    const periodsWithRunning = useMemo(() => {
-        const sorted = [...periods].sort(
-            (a, b) => a.startDate.getTime() - b.startDate.getTime()
-        )
+    // Running balance (accumulate from oldest to newest)
+    const monthsWithRunning = useMemo(() => {
         let running = 0
-        const withRunning = sorted.map((p) => {
-            running += p.netBalance
-            return { ...p, runningBalance: running }
+        return months.map((bucket) => {
+            running += bucket.netBalance
+            return { ...bucket, runningBalance: running }
         })
-        // Reverse back to newest first
-        withRunning.reverse()
-        return withRunning
-    }, [periods])
+    }, [months])
 
-    const grandTotalHoa = periods.reduce((sum, p) => sum + p.totalHoa, 0)
-    const grandTotalDebt = periods.reduce((sum, p) => sum + p.adminDebt, 0)
-    const grandNetBalance = grandTotalDebt - grandTotalHoa
+    // Reverse for display (newest first)
+    const displayed = useMemo(() => [...monthsWithRunning].reverse(), [monthsWithRunning])
+
+    const grandTotalDebt = months.reduce((s, b) => s + b.adminDebt, 0)
+    const grandTotalCredit = months.reduce((s, b) => s + b.totalHoaCredit, 0)
+    const grandNet = grandTotalDebt - grandTotalCredit
 
     return (
         <div className="space-y-6">
@@ -113,15 +173,13 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                         <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
                             <ArrowUpRight className="w-5 h-5 text-red-600 dark:text-red-400" />
                         </div>
-                        <span className="text-sm font-medium text-zinc-500">
-                            Total Arriendo Acumulado
-                        </span>
+                        <span className="text-sm font-medium text-zinc-500">Total Arriendo Acumulado</span>
                     </div>
                     <p className="text-2xl font-bold text-red-600 dark:text-red-400">
                         {formatCurrency(grandTotalDebt)}
                     </p>
                     <p className="text-xs text-zinc-400 mt-1">
-                        Santa Lucia del Bosque • {periods.length} periodo(s)
+                        {formatCurrency(ADMIN_MONTHLY_RENT)}/mes × {months.length} meses
                     </p>
                 </div>
 
@@ -130,16 +188,12 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                         <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
                             <ArrowDownRight className="w-5 h-5 text-green-600 dark:text-green-400" />
                         </div>
-                        <span className="text-sm font-medium text-zinc-500">
-                            Total Administración Ganada
-                        </span>
+                        <span className="text-sm font-medium text-zinc-500">Total Administración Abonada</span>
                     </div>
                     <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {formatCurrency(grandTotalHoa)}
+                        {formatCurrency(grandTotalCredit)}
                     </p>
-                    <p className="text-xs text-zinc-400 mt-1">
-                        HOA 10% de 7 propiedades
-                    </p>
+                    <p className="text-xs text-zinc-400 mt-1">HOA prorrateado por mes calendario</p>
                 </div>
 
                 <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
@@ -147,134 +201,116 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                         <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                             <Scale className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         </div>
-                        <span className="text-sm font-medium text-zinc-500">
-                            Balance Neto
-                        </span>
+                        <span className="text-sm font-medium text-zinc-500">Saldo Acumulado</span>
                     </div>
-                    <p
-                        className={`text-2xl font-bold ${
-                            grandNetBalance > 0
-                                ? "text-red-600 dark:text-red-400"
-                                : grandNetBalance < 0
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-zinc-600 dark:text-zinc-400"
-                        }`}
-                    >
-                        {grandNetBalance > 0 ? "Debe: " : grandNetBalance < 0 ? "A favor: " : ""}
-                        {formatCurrency(Math.abs(grandNetBalance))}
+                    <p className={`text-2xl font-bold ${grandNet > 0 ? "text-red-600 dark:text-red-400" : grandNet < 0 ? "text-green-600 dark:text-green-400" : "text-zinc-600"}`}>
+                        {grandNet > 0 ? "Debe: " : grandNet < 0 ? "A favor: " : ""}
+                        {formatCurrency(Math.abs(grandNet))}
                     </p>
-                    <p className="text-xs text-zinc-400 mt-1">
-                        Arriendo − Administración
-                    </p>
+                    <p className="text-xs text-zinc-400 mt-1">Arriendo − Administración</p>
                 </div>
             </div>
 
-            {/* Period Detail Table */}
+            {/* Month Detail Table */}
             <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
                 <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50">
                     <h3 className="font-semibold text-lg dark:text-white flex items-center gap-2">
                         <Scale className="w-5 h-5 text-zinc-400" />
-                        Detalle por Periodo
+                        Detalle por Mes
                     </h3>
+                    <p className="text-xs text-zinc-400 mt-1">
+                        Los reportes que cruzan entre dos meses se prorratean proporcionalmente por días.
+                    </p>
                 </div>
 
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-zinc-50 dark:bg-zinc-800/50 text-zinc-500 text-xs uppercase border-b border-zinc-200 dark:border-zinc-800">
                             <tr>
-                                <th className="px-6 py-3">Periodo</th>
-                                <th className="px-6 py-3 text-right">
-                                    Arriendo (Debe)
-                                </th>
-                                <th className="px-6 py-3 text-right">
-                                    Administración (Abono)
-                                </th>
-                                <th className="px-6 py-3 text-right">
-                                    Neto Periodo
-                                </th>
-                                <th className="px-6 py-3 text-right">
-                                    Saldo Acumulado
-                                </th>
+                                <th className="px-6 py-3">Mes</th>
+                                <th className="px-6 py-3 text-right">Arriendo (Debe)</th>
+                                <th className="px-6 py-3 text-right">Administración (Abono)</th>
+                                <th className="px-6 py-3 text-right">Neto Mes</th>
+                                <th className="px-6 py-3 text-right">Saldo Acumulado</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                            {periodsWithRunning.length === 0 ? (
+                            {displayed.length === 0 ? (
                                 <tr>
-                                    <td
-                                        colSpan={5}
-                                        className="px-6 py-12 text-center text-zinc-500"
-                                    >
-                                        No hay reportes generados aún.
+                                    <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
+                                        No hay datos desde mayo 2026 aún.
                                     </td>
                                 </tr>
                             ) : (
-                                periodsWithRunning.map((period) => (
+                                displayed.map((bucket) => (
                                     <tr
-                                        key={period.key}
+                                        key={`${bucket.year}-${bucket.month}`}
                                         className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
                                     >
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-zinc-900 dark:text-white capitalize">
-                                                {period.label}
-                                            </div>
-                                            <div className="text-xs text-zinc-400">
-                                                {format(period.startDate, "dd MMM", { locale: es })} –{" "}
-                                                {format(period.endDate, "dd MMM yyyy", { locale: es })}
+                                                {bucket.label}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right font-mono text-red-600 dark:text-red-400">
-                                            {formatCurrency(period.adminDebt)}
+                                            {formatCurrency(bucket.adminDebt)}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="font-mono text-green-600 dark:text-green-400">
-                                                -{formatCurrency(period.totalHoa)}
+                                                -{formatCurrency(bucket.totalHoaCredit)}
                                             </div>
-                                            {/* Expandable property list */}
-                                            <details className="mt-1">
-                                                <summary className="text-xs text-zinc-400 cursor-pointer hover:text-zinc-600">
-                                                    {period.properties.length} propiedades
-                                                </summary>
-                                                <div className="mt-1 space-y-0.5">
-                                                    {period.properties.map((p, i) => (
-                                                        <div
-                                                            key={i}
-                                                            className="flex justify-between text-xs text-zinc-500"
-                                                        >
-                                                            <span className="truncate max-w-[120px]">
-                                                                {p.name}
-                                                            </span>
-                                                            <span className="font-mono">
-                                                                {formatCurrency(p.hoa)}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </details>
+                                            {bucket.hoaCredits.length > 0 && (
+                                                <details className="mt-1">
+                                                    <summary className="text-xs text-zinc-400 cursor-pointer hover:text-zinc-600">
+                                                        {bucket.hoaCredits.length} aporte(s) — ver detalle
+                                                    </summary>
+                                                    <div className="mt-2 space-y-1 text-xs">
+                                                        {bucket.hoaCredits.map((c, i) => (
+                                                            <div
+                                                                key={i}
+                                                                className="flex justify-between items-start gap-2 text-zinc-500 bg-zinc-50 dark:bg-zinc-800/50 rounded px-2 py-1"
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <div className="font-medium text-zinc-700 dark:text-zinc-300 truncate">
+                                                                        {c.propertyName}
+                                                                    </div>
+                                                                    <div className="text-zinc-400">
+                                                                        {c.reportLabel} • {c.daysInMonth}/{c.totalReportDays} días
+                                                                    </div>
+                                                                </div>
+                                                                <span className="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
+                                                                    {formatCurrency(c.proratedHoa)}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <span
                                                 className={`font-mono font-semibold ${
-                                                    period.netBalance > 0
+                                                    bucket.netBalance > 0
                                                         ? "text-red-600 dark:text-red-400"
-                                                        : period.netBalance < 0
+                                                        : bucket.netBalance < 0
                                                         ? "text-green-600 dark:text-green-400"
                                                         : "text-zinc-500"
                                                 }`}
                                             >
-                                                {formatCurrency(period.netBalance)}
+                                                {formatCurrency(bucket.netBalance)}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <span
                                                 className={`font-mono font-bold text-base ${
-                                                    period.runningBalance > 0
+                                                    bucket.runningBalance > 0
                                                         ? "text-red-600 dark:text-red-400"
-                                                        : period.runningBalance < 0
+                                                        : bucket.runningBalance < 0
                                                         ? "text-green-600 dark:text-green-400"
                                                         : "text-zinc-500"
                                                 }`}
                                             >
-                                                {formatCurrency(period.runningBalance)}
+                                                {formatCurrency(bucket.runningBalance)}
                                             </span>
                                         </td>
                                     </tr>
@@ -296,19 +332,16 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                         <div className="flex items-center gap-2">
                             <Minus className="w-3 h-3" />
                             <span>
-                                Canon mensual:{" "}
-                                <strong className="text-zinc-700 dark:text-zinc-300">
-                                    {formatCurrency(ADMIN_RENT)}
-                                </strong>
+                                Canon mensual: <strong className="text-zinc-700 dark:text-zinc-300">{formatCurrency(ADMIN_MONTHLY_RENT)}</strong>
                             </span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="inline-block w-3 h-3 rounded bg-red-200 dark:bg-red-800" />
-                            <span>Debe (positivo)</span>
+                            <span>Debe</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="inline-block w-3 h-3 rounded bg-green-200 dark:bg-green-800" />
-                            <span>A favor (negativo)</span>
+                            <span>A favor</span>
                         </div>
                     </div>
                 </div>
