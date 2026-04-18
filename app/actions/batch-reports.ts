@@ -9,6 +9,7 @@ interface FeeConfig {
     gas: { amount: number, receiptLink: string | null } | null
     cleanup: boolean
     extra: { amount: number, description: string, receiptLinks: string[] } | null
+    deposit: { amount: number, apartmentNumber: string, receiptLink: string | null } | null
 }
 
 interface SpecialCase {
@@ -228,6 +229,20 @@ export async function createBatchReports(data: {
                     }
                 })
             }
+
+            // Deposit (Adds to Owner Payout, so not a deduction)
+            if (fees.deposit && fees.deposit.amount > 0) {
+                await prisma.expense.create({
+                    data: {
+                        propertyId: primaryPropertyId,
+                        description: fees.deposit.apartmentNumber ? `Depósito: Apto ${fees.deposit.apartmentNumber}` : "Depósito",
+                        amount: fees.deposit.amount,
+                        date: reportDate,
+                        category: "DEPOSIT",
+                        receiptDriveLink: fees.deposit.receiptLink
+                    }
+                })
+            }
         } catch (error) {
             console.error("Error creating global fees:", error)
             // We don't fail the whole batch for this, but ideally should alert
@@ -265,14 +280,8 @@ export async function createBatchReports(data: {
                     reportDate: reportDate,
                     totalRent: rent,
                     totalHoa: hoaFee,
-                    totalDeductions: isPrimary ? globalDeductions : 0, // Store specific extra deductions separately? 
-                    // Valid schema: totalDeductions. We can sum hoa + global.
-                    // Let's store totalDeductions as the sum relative to the specific property bucket.
-                    // Actually, separating HOA might be useful. The schema has totalHoa and totalDeductions.
-                    // I will store totalDeductions as *Other* deductions (Global), and totalHoa as HOA.
-                    // So Payout = Rent - HOA - Deductions.
-
-                    payout: payout
+                    totalDeductions: isPrimary ? globalDeductions : 0, 
+                    payout: payout + (isPrimary && fees.deposit ? fees.deposit.amount : 0)
                 }
             }))
         }

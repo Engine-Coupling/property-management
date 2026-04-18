@@ -88,6 +88,7 @@ export async function POST(req: Request) {
             if (meta.propertyName === "BATCH_GAS") subKey = "Gas"
             else if (meta.propertyName === "BATCH_EXTRA") subKey = "Extra"
             else if (meta.propertyName === "BATCH_REPORT") subKey = "Bank"
+            else if (meta.propertyName === "BATCH_DEPOSIT") subKey = "Deposit"
 
             if (!subfolderIds[subKey]) {
                 const id = await createSubfolder(subKey)

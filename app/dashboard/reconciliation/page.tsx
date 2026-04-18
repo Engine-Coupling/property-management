@@ -22,8 +22,24 @@ export default async function ReconciliationPage() {
         orderBy: { startDate: "desc" },
     })
 
+    // Fetch reconciliation payments
+    const payments = await prisma.reconciliationPayment.findMany({
+        orderBy: { date: "desc" },
+    })
+
+    // Fetch global admin-paid costs (gas, cleanup, extra)
+    // These are expenses whose description starts with "Global"
+    const globalCosts = await prisma.expense.findMany({
+        where: {
+            description: {
+                startsWith: "Global",
+            },
+        },
+        orderBy: { date: "desc" },
+    })
+
     // Serialize dates for client component
-    const serialized = reports.map((r) => ({
+    const serializedReports = reports.map((r) => ({
         id: r.id,
         propertyId: r.propertyId,
         propertyName: r.property.name,
@@ -36,6 +52,23 @@ export default async function ReconciliationPage() {
         payout: r.payout,
     }))
 
+    const serializedPayments = payments.map((p) => ({
+        id: p.id,
+        amount: p.amount,
+        date: p.date.toISOString(),
+        note: p.note,
+        receiptLink: p.receiptLink,
+        createdAt: p.createdAt.toISOString(),
+    }))
+
+    const serializedCosts = globalCosts.map((c) => ({
+        id: c.id,
+        description: c.description,
+        amount: c.amount,
+        date: c.date.toISOString(),
+        category: c.category,
+    }))
+
     return (
         <div className="space-y-8">
             <div>
@@ -46,7 +79,11 @@ export default async function ReconciliationPage() {
                     Reconciliación entre honorarios de administración y arriendo de Santa Lucia del Bosque.
                 </p>
             </div>
-            <ReconciliationTable reports={serialized} />
+            <ReconciliationTable
+                reports={serializedReports}
+                payments={serializedPayments}
+                globalCosts={serializedCosts}
+            />
         </div>
     )
 }

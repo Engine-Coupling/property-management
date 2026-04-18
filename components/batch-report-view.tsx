@@ -8,6 +8,7 @@ interface BatchReportViewProps {
         gas?: { amount: number, file?: File | null, meta?: any }
         cleanup?: boolean
         extra?: { amount: number, description: string, files?: FileList | null }
+        deposit?: { amount: number, apartmentNumber: string, file?: File | null }
     }
     bankFile?: File | null
     specialCases?: Array<{
@@ -169,6 +170,12 @@ export function BatchReportView({ results, properties, fees, dates, totals, util
                                     <span className="font-mono text-red-600">-{formatCurrency(fees.extra.amount)}</span>
                                 </div>
                             ) : null}
+                            {fees.deposit?.amount ? (
+                                <div className="flex justify-between text-green-700 font-medium">
+                                    <span>Depósito (Apto {fees.deposit.apartmentNumber}):</span>
+                                    <span className="font-mono">+{formatCurrency(fees.deposit.amount)}</span>
+                                </div>
+                            ) : null}
                             <div className="flex justify-between border-t border-zinc-200 pt-2 font-bold text-lg">
                                 <span>Pago Total al Propietario:</span>
                                 <span className="font-mono text-blue-600 border-b-2 border-double border-blue-600">{formatCurrency(totals.payout)}</span>
@@ -233,10 +240,12 @@ export function BatchReportView({ results, properties, fees, dates, totals, util
                         {fees.gas?.file && renderFilePreview(fees.gas.file, "Recibo de Gas")}
 
                         {fees.extra?.files && Array.from(fees.extra.files).map((file, i) => (
-                            <div key={i}>
+                            <div key={`extra-${i}`}>
                                 {renderFilePreview(file, `Recibo Extra ${i + 1}`)}
                             </div>
                         ))}
+
+                        {fees.deposit?.file && renderFilePreview(fees.deposit.file, `Comprobante Depósito Apto ${fees.deposit.apartmentNumber}`)}
 
                         {/* Bank File */}
                         {bankFile && renderFilePreview(bankFile, "Consignación Bancaria")}

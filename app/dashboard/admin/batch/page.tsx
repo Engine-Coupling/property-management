@@ -35,6 +35,11 @@ export default function BatchReportPage() {
     const [extraDesc, setExtraDesc] = useState("")
     const [extraFiles, setExtraFiles] = useState<FileList | null>(null)
 
+    const [includeDeposit, setIncludeDeposit] = useState(false)
+    const [depositAmount, setDepositAmount] = useState<number>(0)
+    const [depositApartment, setDepositApartment] = useState("")
+    const [depositFile, setDepositFile] = useState<File | null>(null)
+
     const [bankFile, setBankFile] = useState<File | null>(null)
 
     const [loading, setLoading] = useState(false)
@@ -154,9 +159,10 @@ export default function BatchReportPage() {
             let gasLink: string | null = null
             let bankLink: string | null = null
             let extraLinks: string[] = []
+            let depositLink: string | null = null
 
             // 1. Upload Files if needed
-            if ((includeGas && gasFile) || (includeExtra && extraFiles && extraFiles.length > 0) || bankFile) {
+            if ((includeGas && gasFile) || (includeExtra && extraFiles && extraFiles.length > 0) || bankFile || (includeDeposit && depositFile)) {
                 setUploading(true)
                 const formData = new FormData()
                 const month = date.slice(0, 7)
@@ -191,6 +197,16 @@ export default function BatchReportPage() {
                     })
                 }
 
+                if (includeDeposit && depositFile) {
+                    formData.append("file_deposit", depositFile)
+                    formData.append("meta_deposit", JSON.stringify({
+                        propertyName: "BATCH_DEPOSIT",
+                        amount: depositAmount,
+                        apartmentNumber: depositApartment,
+                        month
+                    }))
+                }
+
                 const uploadRes = await fetch('/api/upload/batch', {
                     method: 'POST',
                     body: formData
@@ -205,6 +221,7 @@ export default function BatchReportPage() {
                 if (uploadData.links) {
                     if (uploadData.links['gas']) gasLink = uploadData.links['gas']
                     if (uploadData.links['bank']) bankLink = uploadData.links['bank']
+                    if (uploadData.links['deposit']) depositLink = uploadData.links['deposit']
                     // Collect extra links
                     extraLinks = Object.keys(uploadData.links)
                         .filter(k => k.startsWith('extra_'))
@@ -224,7 +241,8 @@ export default function BatchReportPage() {
                 fees: {
                     gas: includeGas ? { amount: gasAmount, receiptLink: gasLink } : null,
                     cleanup: includeCleanup, // fixed 100k
-                    extra: includeExtra ? { amount: extraAmount, description: extraDesc, receiptLinks: extraLinks } : null
+                    extra: includeExtra ? { amount: extraAmount, description: extraDesc, receiptLinks: extraLinks } : null,
+                    deposit: includeDeposit ? { amount: depositAmount, apartmentNumber: depositApartment, receiptLink: depositLink } : null
                 },
                 specialCases: specialCases.map(sc => ({
                     propertyId: sc.propertyId,
@@ -278,8 +296,9 @@ export default function BatchReportPage() {
     const gas = includeGas ? gasAmount : 0
     const cleanup = includeCleanup ? CLEANUP_AMOUNT : 0
     const extra = includeExtra ? extraAmount : 0
+    const deposit = includeDeposit ? depositAmount : 0
 
-    const finalOwnerPayout = totalPropertyNet - gas - cleanup - extra
+    const finalOwnerPayout = totalPropertyNet - gas - cleanup - extra + deposit
 
     if (submitted) {
         return (
@@ -290,7 +309,8 @@ export default function BatchReportPage() {
                 fees={{
                     gas: includeGas ? { amount: gasAmount, file: gasFile } : undefined,
                     cleanup: includeCleanup,
-                    extra: includeExtra ? { amount: extraAmount, description: extraDesc, files: extraFiles } : undefined
+                    extra: includeExtra ? { amount: extraAmount, description: extraDesc, files: extraFiles } : undefined,
+                    deposit: includeDeposit ? { amount: depositAmount, apartmentNumber: depositApartment, file: depositFile } : undefined
                 }}
                 bankFile={bankFile}
                 dates={{
@@ -497,6 +517,52 @@ export default function BatchReportPage() {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Deposit Fee */}
+                            <div className="space-y-3">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeDeposit}
+                                        onChange={e => setIncludeDeposit(e.target.checked)}
+                                        className="w-4 h-4 rounded border-zinc-300 text-primary focus:ring-primary"
+                                    />
+                                    <span className="text-sm font-medium dark:text-white flex items-center gap-2">
+                                        Depósito Adicional
+                                        <span className="px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold uppercase">Suma al pago</span>
+                                    </span>
+                                </label>
+                                {includeDeposit && (
+                                    <div className="pl-6 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                        <input
+                                            type="number"
+                                            placeholder="Monto"
+                                            value={depositAmount}
+                                            onChange={e => setDepositAmount(Number(e.target.value))}
+                                            className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm dark:text-white"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Número de Apartamento (Ej: 201)"
+                                            value={depositApartment}
+                                            onChange={e => setDepositApartment(e.target.value)}
+                                            className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm dark:text-white"
+                                        />
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="file"
+                                                onChange={e => setDepositFile(e.target.files?.[0] || null)}
+                                                className="hidden"
+                                                id="deposit-upload"
+                                            />
+                                            <label htmlFor="deposit-upload" className="flex items-center gap-2 text-xs text-primary cursor-pointer hover:underline">
+                                                <Upload className="w-3 h-3" />
+                                                {depositFile ? depositFile.name : "Subir Comprobante (Opcional)"}
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
@@ -512,6 +578,12 @@ export default function BatchReportPage() {
                                 <div className="flex justify-between text-sm text-red-500">
                                     <span>Menos Costos Globales:</span>
                                     <span>-{formatCurrency(gas + cleanup + extra)}</span>
+                                </div>
+                            )}
+                            {includeDeposit && deposit > 0 && (
+                                <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                                    <span>Más Depósito Adicional:</span>
+                                    <span>+{formatCurrency(deposit)}</span>
                                 </div>
                             )}
                             <div className="flex justify-between text-sm mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
