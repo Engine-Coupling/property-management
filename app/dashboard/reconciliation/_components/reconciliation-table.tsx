@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { format, getDaysInMonth } from "date-fns"
+import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { formatCurrency } from "@/lib/utils"
 import { Scale, Building2, ArrowDownRight, ArrowUpRight, Minus } from "lucide-react"
@@ -34,10 +34,7 @@ interface MonthBucket {
     hoaCredits: {
         reportId: string
         propertyName: string
-        totalHoa: number
-        daysInMonth: number
-        totalReportDays: number
-        proratedHoa: number
+        hoa: number
         reportLabel: string
     }[]
     totalHoaCredit: number
@@ -48,84 +45,47 @@ interface ReconciliationTableProps {
     reports: Report[]
 }
 
-/**
- * Calculate how many days of a report period fall within a given calendar month.
- */
-function daysOverlap(
-    reportStart: Date,
-    reportEnd: Date,
-    monthStart: Date,
-    monthEnd: Date
-): number {
-    const overlapStart = reportStart > monthStart ? reportStart : monthStart
-    const overlapEnd = reportEnd < monthEnd ? reportEnd : monthEnd
-
-    if (overlapStart > overlapEnd) return 0
-
-    // +1 because both start and end are inclusive
-    const diffMs = overlapEnd.getTime() - overlapStart.getTime()
-    return Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1
-}
-
 export function ReconciliationTable({ reports }: ReconciliationTableProps) {
     const months: MonthBucket[] = useMemo(() => {
-        // Determine date range: from START to either today or latest report, whichever is later
+        // Determine range: from START to today or latest report
         const now = new Date()
-        const currentYear = now.getFullYear()
-        const currentMonth = now.getMonth()
-
-        // Find latest report date to extend range if needed
-        let endYear = currentYear
-        let endMonth = currentMonth
+        let endYear = now.getFullYear()
+        let endMonth = now.getMonth()
 
         for (const r of reports) {
-            const d = new Date(r.endDate)
+            const d = new Date(r.reportDate)
             if (d.getFullYear() > endYear || (d.getFullYear() === endYear && d.getMonth() > endMonth)) {
                 endYear = d.getFullYear()
                 endMonth = d.getMonth()
             }
         }
 
-        // Build calendar month buckets from START to end
+        // Build calendar month buckets
         const buckets: MonthBucket[] = []
         let y = START_YEAR
         let m = START_MONTH
 
         while (y < endYear || (y === endYear && m <= endMonth)) {
-            const daysInMo = getDaysInMonth(new Date(y, m))
-            const monthStart = new Date(y, m, 1, 0, 0, 0)
-            const monthEnd = new Date(y, m, daysInMo, 23, 59, 59)
-
+            // Assign reports to this month based on reportDate (when it was generated)
             const hoaCredits: MonthBucket["hoaCredits"] = []
 
             for (const r of reports) {
-                const rStart = new Date(r.startDate)
-                const rEnd = new Date(r.endDate)
+                const rd = new Date(r.reportDate)
+                if (rd.getFullYear() === y && rd.getMonth() === m) {
+                    const rStart = new Date(r.startDate)
+                    const rEnd = new Date(r.endDate)
+                    const reportLabel = `${format(rStart, "dd MMM", { locale: es })} – ${format(rEnd, "dd MMM yyyy", { locale: es })}`
 
-                const overlap = daysOverlap(rStart, rEnd, monthStart, monthEnd)
-                if (overlap <= 0) continue
-
-                // Total days in the report period (inclusive)
-                const totalReportDays =
-                    Math.floor((rEnd.getTime() - rStart.getTime()) / (1000 * 60 * 60 * 24)) + 1
-
-                // Prorate the HOA proportionally
-                const proratedHoa = Math.round((r.totalHoa * overlap) / totalReportDays)
-
-                const reportLabel = `${format(rStart, "dd MMM", { locale: es })} – ${format(rEnd, "dd MMM", { locale: es })}`
-
-                hoaCredits.push({
-                    reportId: r.id,
-                    propertyName: r.propertyName,
-                    totalHoa: r.totalHoa,
-                    daysInMonth: overlap,
-                    totalReportDays,
-                    proratedHoa,
-                    reportLabel,
-                })
+                    hoaCredits.push({
+                        reportId: r.id,
+                        propertyName: r.propertyName,
+                        hoa: r.totalHoa,
+                        reportLabel,
+                    })
+                }
             }
 
-            const totalHoaCredit = hoaCredits.reduce((sum, c) => sum + c.proratedHoa, 0)
+            const totalHoaCredit = hoaCredits.reduce((sum, c) => sum + c.hoa, 0)
 
             buckets.push({
                 year: y,
@@ -137,27 +97,23 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                 netBalance: ADMIN_MONTHLY_RENT - totalHoaCredit,
             })
 
-            // Advance
             m++
-            if (m > 11) {
-                m = 0
-                y++
-            }
+            if (m > 11) { m = 0; y++ }
         }
 
         return buckets
     }, [reports])
 
-    // Running balance (accumulate from oldest to newest)
+    // Running balance (oldest → newest)
     const monthsWithRunning = useMemo(() => {
         let running = 0
-        return months.map((bucket) => {
-            running += bucket.netBalance
-            return { ...bucket, runningBalance: running }
+        return months.map((b) => {
+            running += b.netBalance
+            return { ...b, runningBalance: running }
         })
     }, [months])
 
-    // Reverse for display (newest first)
+    // Display newest first
     const displayed = useMemo(() => [...monthsWithRunning].reverse(), [monthsWithRunning])
 
     const grandTotalDebt = months.reduce((s, b) => s + b.adminDebt, 0)
@@ -193,7 +149,7 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                     <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                         {formatCurrency(grandTotalCredit)}
                     </p>
-                    <p className="text-xs text-zinc-400 mt-1">HOA prorrateado por mes calendario</p>
+                    <p className="text-xs text-zinc-400 mt-1">Honorarios de administración de propiedades</p>
                 </div>
 
                 <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
@@ -201,7 +157,7 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                         <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                             <Scale className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         </div>
-                        <span className="text-sm font-medium text-zinc-500">Saldo Acumulado</span>
+                        <span className="text-sm font-medium text-zinc-500">Saldo Actual</span>
                     </div>
                     <p className={`text-2xl font-bold ${grandNet > 0 ? "text-red-600 dark:text-red-400" : grandNet < 0 ? "text-green-600 dark:text-green-400" : "text-zinc-600"}`}>
                         {grandNet > 0 ? "Debe: " : grandNet < 0 ? "A favor: " : ""}
@@ -219,7 +175,7 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                         Detalle por Mes
                     </h3>
                     <p className="text-xs text-zinc-400 mt-1">
-                        Los reportes que cruzan entre dos meses se prorratean proporcionalmente por días.
+                        Los honorarios de administración se abonan completamente al mes en que se genera el reporte.
                     </p>
                 </div>
 
@@ -230,7 +186,7 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                                 <th className="px-6 py-3">Mes</th>
                                 <th className="px-6 py-3 text-right">Arriendo (Debe)</th>
                                 <th className="px-6 py-3 text-right">Administración (Abono)</th>
-                                <th className="px-6 py-3 text-right">Neto Mes</th>
+                                <th className="px-6 py-3 text-right">Pago Restante</th>
                                 <th className="px-6 py-3 text-right">Saldo Acumulado</th>
                             </tr>
                         </thead>
@@ -262,7 +218,7 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                                             {bucket.hoaCredits.length > 0 && (
                                                 <details className="mt-1">
                                                     <summary className="text-xs text-zinc-400 cursor-pointer hover:text-zinc-600">
-                                                        {bucket.hoaCredits.length} aporte(s) — ver detalle
+                                                        {bucket.hoaCredits.length} propiedad(es) — ver detalle
                                                     </summary>
                                                     <div className="mt-2 space-y-1 text-xs">
                                                         {bucket.hoaCredits.map((c, i) => (
@@ -275,11 +231,11 @@ export function ReconciliationTable({ reports }: ReconciliationTableProps) {
                                                                         {c.propertyName}
                                                                     </div>
                                                                     <div className="text-zinc-400">
-                                                                        {c.reportLabel} • {c.daysInMonth}/{c.totalReportDays} días
+                                                                        Periodo: {c.reportLabel}
                                                                     </div>
                                                                 </div>
                                                                 <span className="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">
-                                                                    {formatCurrency(c.proratedHoa)}
+                                                                    {formatCurrency(c.hoa)}
                                                                 </span>
                                                             </div>
                                                         ))}
