@@ -151,8 +151,8 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
             for (const c of globalCosts) {
                 const cd = new Date(c.date)
                 if (cd.getFullYear() === y && cd.getMonth() === m) {
-                    // Feature request: Costos adicionales y gas a partir de mayo 2026 (mes 4)
-                    if (y < 2026 || (y === 2026 && m < 4)) {
+                    // Feature request: Costos adicionales y gas a partir de abril 18 de 2026.
+                    if (y < 2026 || (y === 2026 && m < 3) || (y === 2026 && m === 3 && cd.getDate() < 18)) {
                         continue;
                     }
                     costCredits.push(c)
