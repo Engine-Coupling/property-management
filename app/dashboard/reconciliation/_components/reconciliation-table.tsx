@@ -229,7 +229,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
     const grandNet = grandTotalDebt - grandTotalCredit
 
     const handlePaymentSubmit = async () => {
-        if (!paymentAmount || Number(paymentAmount) <= 0) return
+        const calculatedAmount = usePool ? Math.max(0, ADMIN_MONTHLY_RENT - availablePool) : ADMIN_MONTHLY_RENT
 
         setUploading(true)
         let link = ""
@@ -255,7 +255,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
             }
 
             const res = await createReconciliationPayment({
-                amount: Number(paymentAmount),
+                amount: calculatedAmount,
                 date: paymentDate,
                 note: finalNote,
                 receiptLink: link,
@@ -295,7 +295,8 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm animate-in fade-in slide-in-from-top-2">
                     <h3 className="text-lg font-semibold dark:text-white mb-4">Registrar Abono</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 hidden">
+                            {/* Hidden field as user requested auto-calculated amount exclusively */}
                             <label className="text-xs font-medium text-zinc-500 uppercase">Monto</label>
                             <input 
                                 type="number" 
@@ -305,7 +306,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                                 className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm dark:text-white"
                             />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 col-span-1 md:col-span-2">
                             <label className="text-xs font-medium text-zinc-500 uppercase">Fecha</label>
                             <input 
                                 type="date" 
@@ -369,7 +370,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                         <div className="col-span-1 md:col-span-2 lg:col-span-4 flex justify-end pt-2 border-t border-zinc-200 dark:border-zinc-800">
                             <button
                                 onClick={handlePaymentSubmit}
-                                disabled={uploading || paymentAmount === "" || Number(paymentAmount) <= 0}
+                                disabled={uploading}
                                 className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition flex items-center justify-center min-w-[120px]"
                             >
                                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Abono"}
