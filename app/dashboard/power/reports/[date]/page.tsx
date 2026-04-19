@@ -5,7 +5,8 @@ import { formatCurrency } from "@/lib/utils"
 import Link from "next/link"
 import { ArrowLeft, Printer, AlertTriangle, ExternalLink } from "lucide-react"
 
-export default async function HistoricBatchPage({ params }: { params: { date: string } }) {
+export default async function HistoricBatchPage(props: { params: Promise<{ date: string }> }) {
+    const params = await props.params;
     const rawDate = decodeURIComponent(params.date)
     const targetDate = new Date(rawDate)
 
