@@ -126,6 +126,11 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
             for (const r of reports) {
                 const rd = new Date(r.reportDate)
                 if (rd.getFullYear() === y && rd.getMonth() === m) {
+                    // Feature request: Los valores a favor (honorarios) solo a partir del 18 de Abril de 2026.
+                    if (y < 2026 || (y === 2026 && m < 3) || (y === 2026 && m === 3 && rd.getDate() < 18)) {
+                        continue;
+                    }
+
                     // Feature request: Solo adicionar HOA a favor de apartamentos 101, 201, 301.
                     if (!r.propertyName.includes("101") && !r.propertyName.includes("201") && !r.propertyName.includes("301")) {
                         continue;
