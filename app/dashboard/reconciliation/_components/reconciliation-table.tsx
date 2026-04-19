@@ -112,6 +112,11 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
             for (const r of reports) {
                 const rd = new Date(r.reportDate)
                 if (rd.getFullYear() === y && rd.getMonth() === m) {
+                    // Feature request: Solo adicionar HOA a favor de apartamentos 101, 201, 301.
+                    if (!r.propertyName.includes("101") && !r.propertyName.includes("201") && !r.propertyName.includes("301")) {
+                        continue;
+                    }
+
                     const rStart = new Date(r.startDate)
                     const rEnd = new Date(r.endDate)
                     const reportLabel = `${format(rStart, "dd MMM", { locale: es })} – ${format(rEnd, "dd MMM yyyy", { locale: es })}`
@@ -127,6 +132,10 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
             for (const c of globalCosts) {
                 const cd = new Date(c.date)
                 if (cd.getFullYear() === y && cd.getMonth() === m) {
+                    // Feature request: Costos adicionales y gas a partir de mayo 2026 (mes 4)
+                    if (y < 2026 || (y === 2026 && m < 4)) {
+                        continue;
+                    }
                     costCredits.push(c)
                 }
             }
