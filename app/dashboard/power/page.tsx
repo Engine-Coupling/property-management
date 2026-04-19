@@ -4,6 +4,7 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { YearlyReportTable } from "./_components/yearly-report-table"
 import { YearlyExpenseTable } from "./_components/yearly-expense-table"
+import { BatchActions } from "./_components/batch-actions"
 import prisma from "@/lib/prisma"
 
 export default async function PowerAdminPage() {
@@ -95,6 +96,62 @@ export default async function PowerAdminPage() {
                         </div>
                     </div>
                 ))}
+            </div>
+            
+            {/* NEW: Historial de Reportes Generados (Ciclos / Batches) */}
+            <div className="grid gap-6">
+                <h2 className="text-xl font-semibold mt-8 mb-4 border-t pt-8 border-zinc-200 dark:border-zinc-800">
+                    Historial de Reportes Masivos (Lotes de Generación)
+                </h2>
+                <div className="rounded-xl border bg-white dark:bg-zinc-900 shadow-sm overflow-hidden text-slate-950 dark:text-slate-50">
+                    <div className="relative w-full overflow-auto">
+                        <table className="w-full caption-bottom text-sm text-left">
+                            <thead className="[&_tr]:border-b bg-zinc-50 dark:bg-zinc-800/50">
+                                <tr className="border-b transition-colors border-zinc-200 dark:border-zinc-800">
+                                    <th className="h-12 px-6 align-middle font-medium text-slate-500 dark:text-slate-400">Fecha de Generación del Lote</th>
+                                    <th className="h-12 px-6 align-middle font-medium text-slate-500 dark:text-slate-400 text-center">Propiedades Reportadas</th>
+                                    <th className="h-12 px-6 align-middle font-medium text-slate-500 dark:text-slate-400 text-right">Pago Distribuido Total</th>
+                                    <th className="h-12 px-6 align-middle font-medium text-slate-500 dark:text-slate-400 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="[&_tr:last-child]:border-0">
+                                {Object.entries(groupedReports).map(([month, monthReports]) => {
+                                    // Secondary grouping by exact exact Time (since reports in a batch share reportDate)
+                                    // groupedReports is already grouped by month name "January 2025" 
+                                    // So we can flatten reports again for this specific view
+                                    return null;
+                                })}
+                                {/* Actually, we need to flatten and group by reportDate for the WHOLE list, disregarding 'month' string. */}
+                                {Object.entries(
+                                    reports.reduce((acc, r: any) => {
+                                        const dtString = new Date(r.reportDate).toISOString()
+                                        if (!acc[dtString]) acc[dtString] = []
+                                        acc[dtString].push(r)
+                                        return acc
+                                    }, {} as Record<string, any[]>)
+                                ).sort((a,b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([dateStr, batchReports]) => {
+                                    const totalBatchPayout = batchReports.reduce((s, r) => s + r.payout, 0)
+                                    return (
+                                        <tr key={dateStr} className="border-b transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 border-zinc-200 dark:border-zinc-800">
+                                            <td className="px-6 py-4 align-middle font-medium">
+                                                {format(new Date(dateStr), "d MMMM yyyy, HH:mm", { locale: es })}
+                                            </td>
+                                            <td className="px-6 py-4 align-middle text-center text-zinc-500">
+                                                {batchReports.length}
+                                            </td>
+                                            <td className="px-6 py-4 align-middle text-right font-mono text-green-600 dark:text-green-400 font-medium">
+                                                {formatCurrency(totalBatchPayout)}
+                                            </td>
+                                            <td className="px-6 py-4 align-middle text-right">
+                                                <BatchActions dateIso={dateStr} />
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     )
