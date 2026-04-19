@@ -35,6 +35,11 @@ interface ReconciliationPayment {
     createdAt: string
 }
 
+interface ParsedPayment extends ReconciliationPayment {
+    appliedCredit: number
+    cleanNote: string
+}
+
 interface GlobalCost {
     id: string
     description: string
@@ -55,10 +60,11 @@ interface MonthBucket {
         reportLabel: string
     }[]
     costCredits: GlobalCost[]
-    payments: ReconciliationPayment[]
+    payments: ParsedPayment[]
     totalHoaCredit: number
     totalCostCredit: number
     totalPayments: number
+    totalAppliedCredit: number
     netBalance: number
 }
 
@@ -75,6 +81,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
     const [paymentNote, setPaymentNote] = useState("")
     const [paymentFile, setPaymentFile] = useState<File | null>(null)
     const [uploading, setUploading] = useState(false)
+    const [usePool, setUsePool] = useState(false)
 
     const months: MonthBucket[] = useMemo(() => {
         // Determine range: from START to today or latest report/payment
@@ -114,7 +121,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
         while (y < endYear || (y === endYear && m <= endMonth)) {
             const hoaCredits: MonthBucket["hoaCredits"] = []
             const costCredits: GlobalCost[] = []
-            const bucketPayments: ReconciliationPayment[] = []
+            const bucketPayments: ParsedPayment[] = []
 
             for (const r of reports) {
                 const rd = new Date(r.reportDate)
@@ -150,13 +157,23 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
             for (const p of payments) {
                 const pd = new Date(p.date)
                 if (pd.getFullYear() === y && pd.getMonth() === m) {
-                    bucketPayments.push(p)
+                    let appliedCredit = 0
+                    let cleanNote = p.note || ""
+                    if (p.note) {
+                        const match = p.note.match(/APLICACION_CREDITOS:\s*(\d+(\.\d+)?)/)
+                        if (match) {
+                            appliedCredit = parseFloat(match[1])
+                            cleanNote = p.note.replace(match[0], "").replace(/^\s*\|\s*/, "").trim()
+                        }
+                    }
+                    bucketPayments.push({ ...p, appliedCredit, cleanNote })
                 }
             }
 
             const totalHoaCredit = hoaCredits.reduce((sum, c) => sum + c.hoa, 0)
             const totalCostCredit = costCredits.reduce((sum, c) => sum + c.amount, 0)
             const totalPayments = bucketPayments.reduce((sum, p) => sum + p.amount, 0)
+            const totalAppliedCredit = bucketPayments.reduce((sum, p) => sum + p.appliedCredit, 0)
 
             buckets.push({
                 year: y,
@@ -169,7 +186,8 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                 totalHoaCredit,
                 totalCostCredit,
                 totalPayments,
-                netBalance: ADMIN_MONTHLY_RENT - totalHoaCredit - totalCostCredit - totalPayments,
+                totalAppliedCredit,
+                netBalance: ADMIN_MONTHLY_RENT - totalPayments - totalAppliedCredit,
             })
 
             m++
@@ -195,13 +213,18 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
     const grandTotalHoaCredit = months.reduce((s, b) => s + b.totalHoaCredit, 0)
     const grandTotalCostCredit = months.reduce((s, b) => s + b.totalCostCredit, 0)
     const grandTotalPayments = months.reduce((s, b) => s + b.totalPayments, 0)
+    const grandTotalAppliedCredit = months.reduce((s, b) => s + b.totalAppliedCredit, 0)
     
-    // Total Credits = HOA + Global Costs (Gas, Cleanup, Extra) + Settlement Payments
-    const grandTotalCredit = grandTotalHoaCredit + grandTotalCostCredit + grandTotalPayments
+    // Pool Calculation
+    const totalCreditsEarned = grandTotalHoaCredit + grandTotalCostCredit
+    const availablePool = totalCreditsEarned - grandTotalAppliedCredit
+    
+    // Total Credits = Direct Consignations + Credits actually used from pool
+    const grandTotalCredit = grandTotalPayments + grandTotalAppliedCredit
     const grandNet = grandTotalDebt - grandTotalCredit
 
     const handlePaymentSubmit = async () => {
-        if (!paymentAmount || paymentAmount <= 0) return
+        if (paymentAmount === "" || Number(paymentAmount) < 0) return
 
         setUploading(true)
         let link = ""
@@ -220,11 +243,16 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                 const data = await uploadRes.json()
                 if (data.link) link = data.link
             }
+            
+            let finalNote = paymentNote
+            if (usePool && availablePool > 0) {
+                finalNote = `APLICACION_CREDITOS:${availablePool} | ${paymentNote}`
+            }
 
             const res = await createReconciliationPayment({
                 amount: Number(paymentAmount),
                 date: paymentDate,
-                note: paymentNote,
+                note: finalNote,
                 receiptLink: link,
             })
             
@@ -307,12 +335,37 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                                     <span className="truncate max-w-[100px]">{paymentFile ? paymentFile.name : "Recibo"}</span>
                                 </label>
                             </div>
+                        <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row sm:items-center justify-between p-3 border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20 rounded-lg gap-4 mt-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={usePool}
+                                    onChange={e => setUsePool(e.target.checked)}
+                                    disabled={availablePool <= 0}
+                                    className="w-4 h-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-600 disabled:opacity-50"
+                                />
+                                <span className="text-sm font-medium text-blue-900 dark:text-blue-300 flex items-center gap-2 flex-wrap">
+                                    Aplicar saldo a favor acumulado
+                                    <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-400 text-xs font-bold">
+                                        Disponible: {formatCurrency(availablePool)}
+                                    </span>
+                                </span>
+                            </label>
+                            
+                            <div className="text-xs text-blue-800 dark:text-blue-300 bg-white/50 dark:bg-black/20 p-2 rounded w-full sm:w-auto">
+                                <div className="flex justify-between gap-4"><span>Deuda Mes Fija:</span> <span className="font-mono">{formatCurrency(ADMIN_MONTHLY_RENT)}</span></div>
+                                <div className="flex justify-between gap-4 text-green-600 dark:text-green-400"><span>Créditos a Usar:</span> <span className="font-mono">-{formatCurrency(usePool ? availablePool : 0)}</span></div>
+                                <div className="flex justify-between gap-4 font-bold border-t border-blue-200 dark:border-blue-800 mt-1 pt-1 text-red-600 dark:text-red-400"><span>Restante a Consignar:</span> <span className="font-mono">{formatCurrency(ADMIN_MONTHLY_RENT - (usePool ? availablePool : 0))}</span></div>
+                            </div>
+                        </div>
+
+                        <div className="col-span-1 md:col-span-2 lg:col-span-4 flex justify-end pt-2 border-t border-zinc-200 dark:border-zinc-800">
                             <button
                                 onClick={handlePaymentSubmit}
-                                disabled={uploading || !paymentAmount}
-                                className="bg-primary text-primary-foreground px-4 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition flex items-center justify-center min-w-[100px]"
+                                disabled={uploading || paymentAmount === ""}
+                                className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition flex items-center justify-center min-w-[120px]"
                             >
-                                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar"}
+                                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Abono"}
                             </button>
                         </div>
                     </div>
@@ -347,9 +400,9 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                         {formatCurrency(grandTotalCredit)}
                     </p>
                     <div className="text-xs text-zinc-400 mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                        <span>HOA: {formatCurrency(grandTotalHoaCredit)}</span>
-                        <span>Gastos Globales: {formatCurrency(grandTotalCostCredit)}</span>
+                        <span title="Total histórico ganado">Bolsa Créditos Histórica: {formatCurrency(totalCreditsEarned)}</span>
                         <span>Pagos Directos: {formatCurrency(grandTotalPayments)}</span>
+                        <span className="text-blue-500 font-medium">Bolsa Aplicada: {formatCurrency(grandTotalAppliedCredit)}</span>
                     </div>
                 </div>
 
@@ -400,7 +453,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                                 </tr>
                             ) : (
                                 displayed.map((bucket) => {
-                                    const totalBucketCredits = bucket.totalHoaCredit + bucket.totalCostCredit + bucket.totalPayments
+                                    const totalBucketCredits = bucket.totalPayments + bucket.totalAppliedCredit
                                     const hasDetails = bucket.hoaCredits.length > 0 || bucket.costCredits.length > 0 || bucket.payments.length > 0
                                     
                                     return (
@@ -425,11 +478,11 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                                                         <summary className="text-[11px] font-medium uppercase tracking-wider text-zinc-400 cursor-pointer hover:text-zinc-600 dark:hover:text-zinc-300">
                                                             Ver Detalle
                                                         </summary>
-                                                        <div className="mt-3 space-y-3 text-xs">
+                                                        <div className="mt-3 space-y-3 text-xs text-left">
                                                             {/* HOA */}
                                                             {bucket.hoaCredits.length > 0 && (
-                                                                <div className="space-y-1.5">
-                                                                    <div className="text-[10px] uppercase font-bold text-zinc-400">Honorarios de Adm (HOA)</div>
+                                                                <div className="space-y-1.5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition" title="Estos créditos van a la bolsa global, no descuentan directamente el mes.">
+                                                                    <div className="text-[10px] uppercase font-bold text-zinc-400">Generado a Bolsa (HOA)</div>
                                                                     {bucket.hoaCredits.map((c, i) => (
                                                                         <div key={`hoa-${i}`} className="flex justify-between items-center gap-4 text-zinc-600 dark:text-zinc-300 bg-zinc-100/50 dark:bg-zinc-800/50 rounded px-2.5 py-1.5">
                                                                             <span className="truncate max-w-[150px]" title={c.reportLabel}>{c.propertyName}</span>
@@ -441,8 +494,8 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                                                             
                                                             {/* Global Costs */}
                                                             {bucket.costCredits.length > 0 && (
-                                                                <div className="space-y-1.5">
-                                                                    <div className="text-[10px] uppercase font-bold text-zinc-400">Gastos Globales Pagados por Admin</div>
+                                                                <div className="space-y-1.5 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition" title="Estos créditos van a la bolsa global, no descuentan directamente el mes.">
+                                                                    <div className="text-[10px] uppercase font-bold text-zinc-400">Generado a Bolsa (Gastos Admin)</div>
                                                                     {bucket.costCredits.map((c, i) => (
                                                                         <div key={`cost-${i}`} className="flex justify-between items-center gap-4 text-zinc-600 dark:text-zinc-300 bg-zinc-100/50 dark:bg-zinc-800/50 rounded px-2.5 py-1.5">
                                                                             <span className="truncate max-w-[150px]">{c.description}</span>
@@ -455,18 +508,26 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                                                             {/* Direct Payments */}
                                                             {bucket.payments.length > 0 && (
                                                                 <div className="space-y-1.5">
-                                                                    <div className="text-[10px] uppercase font-bold text-zinc-400">Abonos Directos</div>
+                                                                    <div className="text-[10px] uppercase font-bold text-zinc-400">Abonos Aplicados al Mes</div>
                                                                     {bucket.payments.map((p, i) => (
-                                                                        <div key={`pay-${i}`} className="flex justify-between items-center gap-4 text-zinc-600 dark:text-zinc-300 bg-zinc-100/50 dark:bg-zinc-800/50 rounded px-2.5 py-1.5">
-                                                                            <div className="flex items-center gap-2 truncate">
-                                                                                <span className="truncate">{p.note || "Abono a capital"}</span>
-                                                                                {p.receiptLink && (
-                                                                                    <a href={p.receiptLink} target="_blank" rel="noreferrer" title="Ver comprobante" className="text-primary hover:underline">
-                                                                                        <Paperclip className="w-3 h-3 inline" />
-                                                                                    </a>
-                                                                                )}
+                                                                        <div key={`pay-${i}`} className="flex flex-col gap-1 text-zinc-600 dark:text-zinc-300 bg-zinc-100/50 dark:bg-zinc-800/50 rounded px-2.5 py-1.5">
+                                                                            <div className="flex justify-between items-center gap-4">
+                                                                                <div className="flex items-center gap-2 truncate">
+                                                                                    <span className="truncate">{p.cleanNote || "Consignación directa"}</span>
+                                                                                    {p.receiptLink && (
+                                                                                        <a href={p.receiptLink} target="_blank" rel="noreferrer" title="Ver comprobante" className="text-primary hover:underline">
+                                                                                            <Paperclip className="w-3 h-3 inline" />
+                                                                                        </a>
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">{formatCurrency(p.amount)}</span>
                                                                             </div>
-                                                                            <span className="font-mono text-green-600 dark:text-green-400 whitespace-nowrap">{formatCurrency(p.amount)}</span>
+                                                                            {p.appliedCredit > 0 && (
+                                                                                <div className="flex justify-between items-center gap-4 text-[10px] text-blue-600 dark:text-blue-400">
+                                                                                    <span>+ Bolsa de Crédito Aplicada</span>
+                                                                                    <span className="font-mono font-medium">{formatCurrency(p.appliedCredit)}</span>
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     ))}
                                                                 </div>
