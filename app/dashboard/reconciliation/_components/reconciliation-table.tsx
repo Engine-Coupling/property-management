@@ -229,7 +229,10 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
     const grandNet = grandTotalDebt - grandTotalCredit
 
     const handlePaymentSubmit = async () => {
-        if (paymentAmount === "" || Number(paymentAmount) < 0) return
+        const amountToPay = paymentAmount === "" ? 0 : Number(paymentAmount)
+        
+        if (amountToPay < 0) return
+        if (amountToPay === 0 && (!usePool || availablePool <= 0)) return
 
         setUploading(true)
         let link = ""
@@ -255,7 +258,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
             }
 
             const res = await createReconciliationPayment({
-                amount: Number(paymentAmount),
+                amount: amountToPay,
                 date: paymentDate,
                 note: finalNote,
                 receiptLink: link,
@@ -369,7 +372,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                         <div className="col-span-1 md:col-span-2 lg:col-span-4 flex justify-end pt-2 border-t border-zinc-200 dark:border-zinc-800">
                             <button
                                 onClick={handlePaymentSubmit}
-                                disabled={uploading || paymentAmount === ""}
+                                disabled={uploading || (paymentAmount === "" && (!usePool || availablePool <= 0))}
                                 className="bg-primary text-primary-foreground px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition flex items-center justify-center min-w-[120px]"
                             >
                                 {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Abono"}
