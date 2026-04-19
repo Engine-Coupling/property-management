@@ -7,6 +7,8 @@ import { YearlyExpenseTable } from "./_components/yearly-expense-table"
 import { BatchActions } from "./_components/batch-actions"
 import prisma from "@/lib/prisma"
 
+export const dynamic = 'force-dynamic'
+
 export default async function PowerAdminPage() {
     const { success, reports, error } = await getMonthlyReports()
 
