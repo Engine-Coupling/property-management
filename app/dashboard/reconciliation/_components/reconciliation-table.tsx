@@ -10,9 +10,8 @@ import { createReconciliationPayment } from "@/app/actions/reconciliation"
 // The administrator's fixed monthly rent for "Santa Lucia del Bosque"
 const ADMIN_MONTHLY_RENT = 4_000_000
 
-// Reconciliation starts from this month (inclusive)
-const START_YEAR = 2026
-const START_MONTH = 4 // 0-indexed: 4 = May
+// Reconciliation configuration
+// The start year/month will be dynamically calculated from the earliest record.
 
 interface Report {
     id: string
@@ -80,28 +79,30 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
     const months: MonthBucket[] = useMemo(() => {
         // Determine range: from START to today or latest report/payment
         const now = new Date()
+        let startYear = now.getFullYear()
+        let startMonth = now.getMonth()
         let endYear = now.getFullYear()
         let endMonth = now.getMonth()
 
-        for (const r of reports) {
-            const d = new Date(r.reportDate)
-            if (d.getFullYear() > endYear || (d.getFullYear() === endYear && d.getMonth() > endMonth)) {
-                endYear = d.getFullYear()
-                endMonth = d.getMonth()
+        const updateRange = (d: Date) => {
+            if (d.getFullYear() < startYear || (d.getFullYear() === startYear && d.getMonth() < startMonth)) {
+                startYear = d.getFullYear()
+                startMonth = d.getMonth()
             }
-        }
-        for (const p of payments) {
-            const d = new Date(p.date)
             if (d.getFullYear() > endYear || (d.getFullYear() === endYear && d.getMonth() > endMonth)) {
                 endYear = d.getFullYear()
                 endMonth = d.getMonth()
             }
         }
 
+        reports.forEach(r => updateRange(new Date(r.reportDate)))
+        payments.forEach(p => updateRange(new Date(p.date)))
+        globalCosts.forEach(c => updateRange(new Date(c.date)))
+
         // Build calendar month buckets
         const buckets: MonthBucket[] = []
-        let y = START_YEAR
-        let m = START_MONTH
+        let y = startYear
+        let m = startMonth
 
         while (y < endYear || (y === endYear && m <= endMonth)) {
             const hoaCredits: MonthBucket["hoaCredits"] = []
@@ -378,7 +379,7 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                             {displayed.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-12 text-center text-zinc-500">
-                                        No hay datos desde mayo 2026 aún.
+                                        No hay datos disponibles.
                                     </td>
                                 </tr>
                             ) : (

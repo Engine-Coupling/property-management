@@ -31,9 +31,10 @@ export default async function ReconciliationPage() {
     // These are expenses whose description starts with "Global"
     const globalCosts = await prisma.expense.findMany({
         where: {
-            description: {
-                startsWith: "Global",
-            },
+            OR: [
+                { description: { startsWith: "Global" } },
+                { category: "DEPOSIT" }
+            ]
         },
         orderBy: { date: "desc" },
     })
