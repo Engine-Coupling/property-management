@@ -99,6 +99,13 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
         payments.forEach(p => updateRange(new Date(p.date)))
         globalCosts.forEach(c => updateRange(new Date(c.date)))
 
+        // Feature request: No incluir Febrero ni Marzo (ni anteriores) para los cruces de cuentas.
+        // Forzamos que el mes de inicio mínimo sea Abril 2026 (Mes index 3).
+        if (startYear < 2026 || (startYear === 2026 && startMonth < 3)) {
+            startYear = 2026
+            startMonth = 3
+        }
+
         // Build calendar month buckets
         const buckets: MonthBucket[] = []
         let y = startYear
