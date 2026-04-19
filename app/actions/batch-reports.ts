@@ -166,7 +166,16 @@ export async function createBatchReports(data: {
     // 2. Process Global Fees (ONCE)
     // We attach them to the first property in the list to satisfy DB constraints
     // but they represent a batch deduction.
-    const primaryPropertyId = propertyIds[0]
+    let primaryPropertyId = propertyIds[0]
+
+    // If no properties are selected, we still need a property ID to satisfy the 
+    // database constraint for Expense records. We'll grab the first active property.
+    if (!primaryPropertyId) {
+        const anyProperty = await prisma.property.findFirst()
+        if (anyProperty) {
+            primaryPropertyId = anyProperty.id
+        }
+    }
 
     let globalDeductions = 0
 

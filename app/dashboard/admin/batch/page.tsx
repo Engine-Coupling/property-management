@@ -152,7 +152,8 @@ export default function BatchReportPage() {
     }
 
     const handleSubmit = async () => {
-        if (selectedIds.length === 0 && specialCases.length === 0) return
+        const hasGlobalFees = includeGas || includeCleanup || includeExtra || includeDeposit
+        if (selectedIds.length === 0 && specialCases.length === 0 && !hasGlobalFees) return
         setLoading(true)
 
         try {
@@ -594,7 +595,7 @@ export default function BatchReportPage() {
 
                         <button
                             onClick={handleSubmit}
-                            disabled={loading || (selectedIds.length === 0 && specialCases.length === 0)}
+                            disabled={loading || (selectedIds.length === 0 && specialCases.length === 0 && !(includeGas || includeCleanup || includeExtra || includeDeposit))}
                             className="w-full bg-primary text-white py-2 rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center disabled:opacity-50"
                         >
                             {loading ? (
