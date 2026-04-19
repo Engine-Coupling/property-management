@@ -335,6 +335,8 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                                     <span className="truncate max-w-[100px]">{paymentFile ? paymentFile.name : "Recibo"}</span>
                                 </label>
                             </div>
+                        </div>
+
                         <div className="col-span-1 md:col-span-2 lg:col-span-4 flex flex-col sm:flex-row sm:items-center justify-between p-3 border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20 rounded-lg gap-4 mt-2">
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input 
