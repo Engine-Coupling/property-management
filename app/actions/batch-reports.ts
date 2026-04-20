@@ -182,15 +182,15 @@ export async function createBatchReports(data: {
     if (primaryPropertyId) {
         try {
             // Create Batch Report Record (Zero Amount, just for Link & Period)
-            if (bankLink) {
+            if (bankLink || fees.gas || fees.cleanup || fees.extra || fees.deposit) {
                 await prisma.expense.create({
                     data: {
                         propertyId: primaryPropertyId,
-                        description: `Batch Report: ${period.start} to ${period.end}`,
+                        description: `Batch Report: ${period.start} to ${period.end} (Generado por ${session?.user?.name || "Administrador"})`,
                         amount: 0, // Informational record
                         date: reportDate,
                         category: "OTHER",
-                        receiptDriveLink: bankLink
+                        receiptDriveLink: bankLink || null
                     }
                 })
             }
@@ -291,6 +291,22 @@ export async function createBatchReports(data: {
                     totalHoa: hoaFee,
                     totalDeductions: isPrimary ? globalDeductions : 0, 
                     payout: payout + (isPrimary && fees.deposit ? fees.deposit.amount : 0)
+                }
+            }))
+        }
+
+        // Ghost Report creation for Global-Expense-Only Batches
+        if (properties.length === 0 && specialCases.length === 0 && primaryPropertyId) {
+            reportOps.push(prisma.monthlyReport.create({
+                data: {
+                    propertyId: primaryPropertyId,
+                    startDate: toSafeDate(period.start),
+                    endDate: toSafeDate(period.end),
+                    reportDate: reportDate,
+                    totalRent: 0,
+                    totalHoa: 0,
+                    totalDeductions: globalDeductions,
+                    payout: (fees.deposit ? fees.deposit.amount : 0) - globalDeductions
                 }
             }))
         }

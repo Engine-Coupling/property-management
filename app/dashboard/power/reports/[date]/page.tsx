@@ -3,7 +3,8 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { formatCurrency } from "@/lib/utils"
 import Link from "next/link"
-import { ArrowLeft, Printer, AlertTriangle, ExternalLink } from "lucide-react"
+import { ArrowLeft, AlertTriangle, ExternalLink } from "lucide-react"
+import { ClientPrintButton } from "@/components/client-print-button"
 
 export default async function HistoricBatchPage(props: { params: Promise<{ date: string }> }) {
     const params = await props.params;
@@ -39,6 +40,10 @@ export default async function HistoricBatchPage(props: { params: Promise<{ date:
     const depositFee = expenses.find(e => e.description.includes("Depósito"))
     const batchRepInfo = expenses.find(e => e.description.includes("Batch Report"))
 
+    // Extract Author from Description: e.g. "Batch Report: 2026-04-01 to 2026-04-30 (Generado por Paula)"
+    const generatorMatch = batchRepInfo?.description.match(/\(Generado por (.*?)\)/)
+    const generatorName = generatorMatch ? generatorMatch[1] : "Administrador"
+
     const totalPropertyRent = reports.reduce((s, r) => s + r.totalRent, 0)
     const totalPropertyHoa = reports.reduce((s, r) => s + r.totalHoa, 0)
     const totalPayout = reports.reduce((s, r) => s + r.payout, 0)
@@ -55,15 +60,7 @@ export default async function HistoricBatchPage(props: { params: Promise<{ date:
                     <ArrowLeft className="w-4 h-4" />
                     Volver a Historial
                 </Link>
-                <button
-                    className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2 rounded-lg font-medium hover:bg-slate-800 transition"
-                >
-                    <script dangerouslySetInnerHTML={{ __html: `
-                        if (document.currentScript) document.currentScript.parentElement.onclick = function() { window.print() }
-                    `}} />
-                    <Printer className="w-4 h-4" />
-                    Imprimir / Descargar PDF
-                </button>
+                <ClientPrintButton />
             </div>
 
             {/* Printable Ticket Area */}
@@ -77,6 +74,7 @@ export default async function HistoricBatchPage(props: { params: Promise<{ date:
                     <div className="text-right space-y-1 text-sm">
                         <p><span className="font-semibold">Emitido en Sistema:</span> {format(targetDate, "dd MMM yyyy, HH:mm", { locale: es })}</p>
                         <p><span className="font-semibold">Periodo:</span> {format(startDate, "dd MMM", { locale: es })} a {format(endDate, "dd MMM", { locale: es })}</p>
+                        <p className="text-zinc-500 italic">Despachado por: {generatorName}</p>
                     </div>
                 </div>
 
