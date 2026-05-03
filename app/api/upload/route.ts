@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { uploadFileToDrive } from "@/lib/drive"
+import { uploadFileWithUserToken } from "@/lib/drive"
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
 
-    if (!session) {
+    if (!session || !session.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const accessToken = (session as any).accessToken
+    if (!accessToken) {
+        return NextResponse.json(
+            { error: "No Drive access token. Please sign out and sign back in to grant Drive permissions." },
+            { status: 401 }
+        )
     }
 
     try {
@@ -18,9 +26,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "No file provided" }, { status: 400 })
         }
 
-        // Determine target folder based on context? Or config.
-        // Ideally user or property specific folder. For now, root.
-        const driveFile = await uploadFileToDrive(file)
+        const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID
+        if (!rootFolderId) throw new Error("Missing root folder ID")
+
+        const driveFile = await uploadFileWithUserToken(file, rootFolderId, accessToken)
 
         return NextResponse.json({
             link: driveFile.webViewLink,

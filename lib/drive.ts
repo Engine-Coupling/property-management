@@ -113,6 +113,7 @@ export async function uploadFileWithUserToken(file: File, folderId: string, acce
             requestBody: fileMetadata,
             media: media,
             fields: "id, webViewLink, webContentLink",
+            supportsAllDrives: true,
         })
 
         return response.data
@@ -142,6 +143,7 @@ export async function createDriveFolderWithToken(folderName: string, accessToken
         const response = await drive.files.create({
             requestBody: fileMetadata,
             fields: "id, webViewLink",
+            supportsAllDrives: true,
         })
 
         return response.data
