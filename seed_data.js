@@ -58,7 +58,7 @@ async function main() {
     }
 
     // 4. Promote Admins (Managers)
-    const admins = ['413cecilst@gmail.com', 'Alexarte0607@gmail.com']
+    const admins = ['413cecilst@gmail.com', 'Alexarte0607@gmail.com', 'artesanabreakfast@gmail.com']
 
     for (const email of admins) {
         console.log(`Promoting user ${email} to ADMIN...`)
