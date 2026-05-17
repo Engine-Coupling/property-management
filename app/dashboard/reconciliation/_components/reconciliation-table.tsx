@@ -118,6 +118,9 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
         let y = startYear
         let m = startMonth
 
+        // Keep track of processed reports by property and period to avoid double counting regenerations
+        const seenHoa = new Set<string>()
+
         while (y < endYear || (y === endYear && m <= endMonth)) {
             const hoaCredits: MonthBucket["hoaCredits"] = []
             const costCredits: GlobalCost[] = []
@@ -132,12 +135,20 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                     }
 
                     // Feature request: Solo adicionar HOA a favor de apartamentos 101, 201, 301.
-                    if (!r.propertyName.includes("101") && !r.propertyName.includes("201") && !r.propertyName.includes("301")) {
+                    if (!["101", "201", "301"].includes(r.propertyName)) {
                         continue;
                     }
 
                     const rStart = new Date(r.startDate)
                     const rEnd = new Date(r.endDate)
+
+                    // Prevent duplicate credits when a report for the same period is generated multiple times
+                    const periodKey = `${r.propertyId}-${rStart.getTime()}-${rEnd.getTime()}`
+                    if (seenHoa.has(periodKey)) {
+                        continue;
+                    }
+                    seenHoa.add(periodKey)
+
                     const reportLabel = `${format(rStart, "dd MMM", { locale: es })} – ${format(rEnd, "dd MMM yyyy", { locale: es })}`
                     hoaCredits.push({
                         reportId: r.id,
