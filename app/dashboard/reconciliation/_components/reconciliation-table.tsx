@@ -134,8 +134,8 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                         continue;
                     }
 
-                    // Feature request: Solo adicionar HOA a favor de apartamentos 101, 201, 301.
-                    if (!["101", "201", "301"].includes(r.propertyName)) {
+                    // Feature request: Solo adicionar HOA a favor de apartamentos 101, 201, 301, y 302.
+                    if (!["101", "201", "301", "302"].includes(r.propertyName)) {
                         continue;
                     }
 
