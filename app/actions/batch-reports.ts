@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache"
 interface FeeConfig {
     gas: { amount: number, receiptLink: string | null } | null
     cleanup: boolean
-    extra: { amount: number, description: string, receiptLinks: string[] } | null
+    extras: { amount: number, description: string, receiptLinks: string[] }[]
     deposit: { amount: number, apartmentNumber: string, receiptLink: string | null } | null
 }
 
@@ -182,7 +182,7 @@ export async function createBatchReports(data: {
     if (primaryPropertyId) {
         try {
             // Create Batch Report Record (Zero Amount, just for Link & Period)
-            if (bankLink || fees.gas || fees.cleanup || fees.extra || fees.deposit) {
+            if (bankLink || fees.gas || fees.cleanup || (fees.extras && fees.extras.length > 0) || fees.deposit) {
                 await prisma.expense.create({
                     data: {
                         propertyId: primaryPropertyId,
@@ -223,20 +223,24 @@ export async function createBatchReports(data: {
                 })
             }
 
-            // Extra Fee
-            if (fees.extra && fees.extra.amount > 0) {
-                globalDeductions += fees.extra.amount
-                const links = fees.extra.receiptLinks.join(", ")
-                await prisma.expense.create({
-                    data: {
-                        propertyId: primaryPropertyId,
-                        description: fees.extra.description ? `Global: ${fees.extra.description}` : "Global Extra Fee",
-                        amount: fees.extra.amount,
-                        date: reportDate,
-                        category: "OTHER",
-                        receiptDriveLink: links || null
+            // Extra Fees
+            if (fees.extras && fees.extras.length > 0) {
+                for (const extra of fees.extras) {
+                    if (extra.amount > 0) {
+                        globalDeductions += extra.amount
+                        const links = extra.receiptLinks.join(", ")
+                        await prisma.expense.create({
+                            data: {
+                                propertyId: primaryPropertyId,
+                                description: extra.description ? `Global: ${extra.description}` : "Global Extra Fee",
+                                amount: extra.amount,
+                                date: reportDate,
+                                category: "OTHER",
+                                receiptDriveLink: links || null
+                            }
+                        })
                     }
-                })
+                }
             }
 
             // Deposit (Adds to Owner Payout, so not a deduction)

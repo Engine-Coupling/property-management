@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBatchReports } from "@/app/actions/batch-reports"
 import { formatCurrency } from "@/lib/utils"
-import { Calendar, DollarSign, Loader2, CheckCircle, Upload, FileText, Info } from "lucide-react"
+import { Calendar, DollarSign, Loader2, CheckCircle, Upload, FileText, Info, X } from "lucide-react"
 import { BatchReportView } from "@/components/batch-report-view"
 
 interface Property {
@@ -30,10 +30,13 @@ export default function BatchReportPage() {
     const [includeCleanup, setIncludeCleanup] = useState(false)
     const CLEANUP_AMOUNT = 100000
 
-    const [includeExtra, setIncludeExtra] = useState(false)
-    const [extraAmount, setExtraAmount] = useState<number>(0)
-    const [extraDesc, setExtraDesc] = useState("")
-    const [extraFiles, setExtraFiles] = useState<FileList | null>(null)
+    interface ExtraCost {
+        id: string
+        amount: number
+        description: string
+        files: FileList | null
+    }
+    const [extraCosts, setExtraCosts] = useState<ExtraCost[]>([])
 
     const [includeDeposit, setIncludeDeposit] = useState(false)
     const [depositAmount, setDepositAmount] = useState<number>(0)
@@ -152,7 +155,7 @@ export default function BatchReportPage() {
     }
 
     const handleSubmit = async () => {
-        const hasGlobalFees = includeGas || includeCleanup || includeExtra || includeDeposit
+        const hasGlobalFees = includeGas || includeCleanup || extraCosts.length > 0 || includeDeposit
         if (selectedIds.length === 0 && specialCases.length === 0 && !hasGlobalFees) return
         setLoading(true)
 
@@ -161,9 +164,10 @@ export default function BatchReportPage() {
             let bankLink: string | null = null
             let extraLinks: string[] = []
             let depositLink: string | null = null
+            let uploadDataRes: any = null
 
-            // 1. Upload Files if needed
-            if ((includeGas && gasFile) || (includeExtra && extraFiles && extraFiles.length > 0) || bankFile || (includeDeposit && depositFile)) {
+            const hasExtraFiles = extraCosts.some(ec => ec.files && ec.files.length > 0)
+            if ((includeGas && gasFile) || hasExtraFiles || bankFile || (includeDeposit && depositFile)) {
                 setUploading(true)
                 const formData = new FormData()
                 const month = date.slice(0, 7)
@@ -187,14 +191,18 @@ export default function BatchReportPage() {
                     }))
                 }
 
-                if (includeExtra && extraFiles) {
-                    Array.from(extraFiles).forEach((file, i) => {
-                        formData.append(`file_extra_${i}`, file)
-                        formData.append(`meta_extra_${i}`, JSON.stringify({
-                            propertyName: "BATCH_EXTRA",
-                            amount: extraAmount,
-                            month
-                        }))
+                if (extraCosts.length > 0) {
+                    extraCosts.forEach((ec, costIdx) => {
+                        if (ec.files) {
+                            Array.from(ec.files).forEach((file, fileIdx) => {
+                                formData.append(`file_extra_${costIdx}_${fileIdx}`, file)
+                                formData.append(`meta_extra_${costIdx}_${fileIdx}`, JSON.stringify({
+                                    propertyName: "BATCH_EXTRA",
+                                    amount: ec.amount,
+                                    month
+                                }))
+                            })
+                        }
                     })
                 }
 
@@ -218,18 +226,32 @@ export default function BatchReportPage() {
                     throw new Error(errData.error || `Upload failed (${uploadRes.status})`)
                 }
                 const uploadData = await uploadRes.json()
+                uploadDataRes = uploadData
 
                 if (uploadData.links) {
                     if (uploadData.links['gas']) gasLink = uploadData.links['gas']
                     if (uploadData.links['bank']) bankLink = uploadData.links['bank']
                     if (uploadData.links['deposit']) depositLink = uploadData.links['deposit']
-                    // Collect extra links
-                    extraLinks = Object.keys(uploadData.links)
-                        .filter(k => k.startsWith('extra_'))
-                        .map(k => uploadData.links[k])
+                    // Extra links will be mapped later
                 }
                 setUploading(false)
             }
+
+            const mappedExtras = extraCosts.map((ec, costIdx) => {
+                const recLinks: string[] = []
+                if (ec.files && uploadDataRes && uploadDataRes.links) {
+                    for (let fileIdx = 0; fileIdx < ec.files.length; fileIdx++) {
+                        const linkKey = `extra_${costIdx}_${fileIdx}`
+                        if (uploadDataRes.links[linkKey]) recLinks.push(uploadDataRes.links[linkKey])
+                    }
+                }
+                return {
+                    amount: ec.amount,
+                    description: ec.description,
+                    receiptLinks: recLinks,
+                    files: ec.files
+                }
+            })
 
             // 2. Submit reports
             const res = await createBatchReports({
@@ -242,7 +264,7 @@ export default function BatchReportPage() {
                 fees: {
                     gas: includeGas ? { amount: gasAmount, receiptLink: gasLink } : null,
                     cleanup: includeCleanup, // fixed 100k
-                    extra: includeExtra ? { amount: extraAmount, description: extraDesc, receiptLinks: extraLinks } : null,
+                    extras: mappedExtras,
                     deposit: includeDeposit ? { amount: depositAmount, apartmentNumber: depositApartment, receiptLink: depositLink } : null
                 },
                 specialCases: specialCases.map(sc => ({
@@ -296,7 +318,7 @@ export default function BatchReportPage() {
     // 2. Subtract Global Fees ONCE
     const gas = includeGas ? gasAmount : 0
     const cleanup = includeCleanup ? CLEANUP_AMOUNT : 0
-    const extra = includeExtra ? extraAmount : 0
+    const extra = extraCosts.reduce((acc, ec) => acc + (ec.amount || 0), 0)
     const deposit = includeDeposit ? depositAmount : 0
 
     const finalOwnerPayout = totalPropertyNet - gas - cleanup - extra + deposit
@@ -310,7 +332,7 @@ export default function BatchReportPage() {
                 fees={{
                     gas: includeGas ? { amount: gasAmount, file: gasFile } : undefined,
                     cleanup: includeCleanup,
-                    extra: includeExtra ? { amount: extraAmount, description: extraDesc, files: extraFiles } : undefined,
+                    extras: extraCosts.map(ec => ({ amount: ec.amount, description: ec.description, files: ec.files })),
                     deposit: includeDeposit ? { amount: depositAmount, apartmentNumber: depositApartment, file: depositFile } : undefined
                 }}
                 bankFile={bankFile}
@@ -475,48 +497,71 @@ export default function BatchReportPage() {
                                 )}
                             </div>
 
-                            {/* Extra Fee */}
+                            {/* Extra Fees */}
                             <div className="space-y-3">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={includeExtra}
-                                        onChange={e => setIncludeExtra(e.target.checked)}
-                                        className="w-4 h-4 rounded border-zinc-300 text-primary focus:ring-primary"
-                                    />
-                                    <span className="text-sm font-medium dark:text-white">Costo Extra</span>
-                                </label>
-                                {includeExtra && (
-                                    <div className="pl-6 space-y-2 animate-in slide-in-from-top-2 duration-200">
-                                        <input
-                                            type="number"
-                                            placeholder="Monto"
-                                            value={extraAmount}
-                                            onChange={e => setExtraAmount(Number(e.target.value))}
-                                            className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm dark:text-white"
-                                        />
-                                        <input
-                                            type="text"
-                                            placeholder="Descripción"
-                                            value={extraDesc}
-                                            onChange={e => setExtraDesc(e.target.value)}
-                                            className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm dark:text-white"
-                                        />
-                                        <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium dark:text-white">Costos Extras</span>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setExtraCosts([...extraCosts, { id: Date.now().toString(), amount: 0, description: "", files: null }])}
+                                        className="text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                    >
+                                        + Adicionar Costo Extra
+                                    </button>
+                                </div>
+                                {extraCosts.map((ec, index) => (
+                                    <div key={ec.id} className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 space-y-3 animate-in slide-in-from-top-2 duration-200 relative">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setExtraCosts(extraCosts.filter((_, i) => i !== index))}
+                                            className="absolute top-3 right-3 text-zinc-400 hover:text-red-500 transition-colors"
+                                            title="Eliminar"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pr-6">
+                                            <input
+                                                type="number"
+                                                placeholder="Monto"
+                                                value={ec.amount || ""}
+                                                onChange={e => {
+                                                    const newArr = [...extraCosts];
+                                                    newArr[index].amount = Number(e.target.value);
+                                                    setExtraCosts(newArr);
+                                                }}
+                                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm dark:text-white"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Descripción (Ej: Reparación tubo)"
+                                                value={ec.description}
+                                                onChange={e => {
+                                                    const newArr = [...extraCosts];
+                                                    newArr[index].description = e.target.value;
+                                                    setExtraCosts(newArr);
+                                                }}
+                                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm dark:text-white"
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
                                             <input
                                                 type="file"
                                                 multiple
-                                                onChange={e => setExtraFiles(e.target.files)}
+                                                onChange={e => {
+                                                    const newArr = [...extraCosts];
+                                                    newArr[index].files = e.target.files;
+                                                    setExtraCosts(newArr);
+                                                }}
                                                 className="hidden"
-                                                id="extra-upload"
+                                                id={`extra-upload-${ec.id}`}
                                             />
-                                            <label htmlFor="extra-upload" className="flex items-center gap-2 text-xs text-primary cursor-pointer hover:underline">
+                                            <label htmlFor={`extra-upload-${ec.id}`} className="flex items-center gap-2 text-xs text-primary cursor-pointer hover:underline">
                                                 <Upload className="w-3 h-3" />
-                                                {extraFiles ? `${extraFiles.length} archivos seleccionados` : "Subir Recibos (Múltiple)"}
+                                                {ec.files && ec.files.length > 0 ? `${ec.files.length} archivos seleccionados` : "Subir Recibos (Múltiple)"}
                                             </label>
                                         </div>
                                     </div>
-                                )}
+                                ))}
                             </div>
 
                             {/* Deposit Fee */}
@@ -575,7 +620,7 @@ export default function BatchReportPage() {
                                 <span className="text-zinc-500">Neto de Propiedades (Renta - HOA):</span>
                                 <span className="font-medium dark:text-white">{formatCurrency(totalPropertyNet)}</span>
                             </div>
-                            {(includeGas || includeCleanup || includeExtra) && (
+                            {(includeGas || includeCleanup || extraCosts.length > 0) && (
                                 <div className="flex justify-between text-sm text-red-500">
                                     <span>Menos Costos Globales:</span>
                                     <span>-{formatCurrency(gas + cleanup + extra)}</span>
@@ -595,7 +640,7 @@ export default function BatchReportPage() {
 
                         <button
                             onClick={handleSubmit}
-                            disabled={loading || (selectedIds.length === 0 && specialCases.length === 0 && !(includeGas || includeCleanup || includeExtra || includeDeposit))}
+                            disabled={loading || (selectedIds.length === 0 && specialCases.length === 0 && !(includeGas || includeCleanup || extraCosts.length > 0 || includeDeposit))}
                             className="w-full bg-primary text-white py-2 rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center disabled:opacity-50"
                         >
                             {loading ? (

@@ -7,7 +7,7 @@ interface BatchReportViewProps {
     fees: {
         gas?: { amount: number, file?: File | null, meta?: any }
         cleanup?: boolean
-        extra?: { amount: number, description: string, files?: FileList | null }
+        extras?: { amount: number, description: string, files?: FileList | null, receiptLinks?: string[] }[]
         deposit?: { amount: number, apartmentNumber: string, file?: File | null }
     }
     bankFile?: File | null
@@ -164,12 +164,12 @@ export function BatchReportView({ results, properties, fees, dates, totals, util
                                     <span className="font-mono text-red-600">-{formatCurrency(100000)}</span>
                                 </div>
                             ) : null}
-                            {fees.extra?.amount ? (
-                                <div className="flex justify-between">
-                                    <span>Extra ({fees.extra.description}):</span>
-                                    <span className="font-mono text-red-600">-{formatCurrency(fees.extra.amount)}</span>
+                            {fees.extras && fees.extras.length > 0 ? fees.extras.map((ec, i) => (
+                                <div key={`fee-ext-${i}`} className="flex justify-between">
+                                    <span>Extra ({ec.description}):</span>
+                                    <span className="font-mono text-red-600">-{formatCurrency(ec.amount)}</span>
                                 </div>
-                            ) : null}
+                            )) : null}
                             {fees.deposit?.amount ? (
                                 <div className="flex justify-between text-green-700 font-medium">
                                     <span>Depósito (Apto {fees.deposit.apartmentNumber}):</span>
@@ -239,10 +239,12 @@ export function BatchReportView({ results, properties, fees, dates, totals, util
                     <div className="grid grid-cols-2 gap-8">
                         {fees.gas?.file && renderFilePreview(fees.gas.file, "Recibo de Gas")}
 
-                        {fees.extra?.files && Array.from(fees.extra.files).map((file, i) => (
-                            <div key={`extra-${i}`}>
-                                {renderFilePreview(file, `Recibo Extra ${i + 1}`)}
-                            </div>
+                        {fees.extras && fees.extras.map((ec, costIdx) => (
+                            ec.files && Array.from(ec.files).map((file, i) => (
+                                <div key={`extra-${costIdx}-${i}`}>
+                                    {renderFilePreview(file, `Recibo Extra ${costIdx + 1} - Archivo ${i + 1}`)}
+                                </div>
+                            ))
                         ))}
 
                         {fees.deposit?.file && renderFilePreview(fees.deposit.file, `Comprobante Depósito Apto ${fees.deposit.apartmentNumber}`)}
