@@ -47,7 +47,7 @@ export function Sidebar() {
             name: "Cruce de Cuentas",
             href: "/dashboard/reconciliation",
             icon: Scale,
-            show: isPowerAdmin,
+            show: true,
         },
     ]
 

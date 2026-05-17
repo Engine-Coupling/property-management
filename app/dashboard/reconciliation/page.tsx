@@ -8,8 +8,8 @@ export default async function ReconciliationPage() {
     const session = await getServerSession(authOptions)
     const role = (session?.user as any)?.role
 
-    if (!session || (role !== "ADMIN" && role !== "POWER_ADMIN")) {
-        redirect("/dashboard/owner")
+    if (!session) {
+        redirect("/")
     }
 
     // Fetch all monthly reports with property info
