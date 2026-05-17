@@ -139,8 +139,21 @@ export function ReconciliationTable({ reports, payments, globalCosts }: Reconcil
                         continue;
                     }
 
+                    // Ignorar reportes fantasma o donde no hay honorarios a favor
+                    if (r.totalHoa <= 0) {
+                        continue;
+                    }
+
                     const rStart = new Date(r.startDate)
                     const rEnd = new Date(r.endDate)
+
+                    // Feature request: Los honorarios solo aplican para periodos de arriendo a partir del 18 de Abril de 2026
+                    // rStart.getMonth() === 3 es Abril
+                    if (rStart.getFullYear() < 2026 || 
+                       (rStart.getFullYear() === 2026 && rStart.getMonth() < 3) || 
+                       (rStart.getFullYear() === 2026 && rStart.getMonth() === 3 && rStart.getDate() < 18)) {
+                        continue;
+                    }
 
                     // Prevent duplicate credits when a report for the same period is generated multiple times
                     const periodKey = `${r.propertyId}-${rStart.getTime()}-${rEnd.getTime()}`
